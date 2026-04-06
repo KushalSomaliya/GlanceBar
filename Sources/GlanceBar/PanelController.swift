@@ -30,7 +30,7 @@ class PanelController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         visualEffectView = NSVisualEffectView()
-        visualEffectView.material = .sidebar
+        visualEffectView.material = .underWindowBackground
         visualEffectView.blendingMode = .behindWindow
         visualEffectView.state = .active
         visualEffectView.autoresizingMask = [.width, .height]
@@ -51,6 +51,7 @@ class PanelController {
         ])
 
         webViewController.loadWidget()
+        updateVisualEffectAppearance()
 
         if preferencesManager.isPinnedToDesktop {
             isPinnedToDesktop = true
@@ -82,6 +83,35 @@ class PanelController {
 
     func reloadWebView() {
         webViewController.reload()
+    }
+
+    func applyTheme() {
+        let theme = preferencesManager.theme
+        webViewController.setTheme(theme)
+        updateVisualEffectAppearance()
+    }
+
+    private func updateVisualEffectAppearance() {
+        let theme = preferencesManager.theme
+        let isDark: Bool
+        switch theme {
+        case "dark":
+            isDark = true
+        case "light":
+            isDark = false
+        default:
+            isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+
+        if isDark {
+            visualEffectView.appearance = NSAppearance(named: .darkAqua)
+            visualEffectView.material = .underWindowBackground
+            panel.backgroundColor = NSColor(white: 0.1, alpha: 1.0)
+        } else {
+            visualEffectView.appearance = NSAppearance(named: .aqua)
+            visualEffectView.material = .sidebar
+            panel.backgroundColor = NSColor(white: 0.95, alpha: 1.0)
+        }
     }
 
     func dismissIfVisible() {

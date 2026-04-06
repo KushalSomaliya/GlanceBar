@@ -11,6 +11,7 @@ class PreferencesManager {
         static let isPinnedToDesktop = "isPinnedToDesktop"
         static let desktopPanelX = "desktopPanelX"
         static let desktopPanelY = "desktopPanelY"
+        static let theme = "theme"
     }
 
     var hotCorner: ScreenCorner {
@@ -60,5 +61,10 @@ class PreferencesManager {
     var desktopPanelY: CGFloat {
         get { defaults.double(forKey: Keys.desktopPanelY) }
         set { defaults.set(newValue, forKey: Keys.desktopPanelY) }
+    }
+
+    var theme: String {
+        get { defaults.string(forKey: Keys.theme) ?? "auto" }
+        set { defaults.set(newValue, forKey: Keys.theme) }
     }
 }

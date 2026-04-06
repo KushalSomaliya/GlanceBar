@@ -19,22 +19,19 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
             source: """
                 window.GlanceBar = {
                     copy: function(text) {
-                        window.webkit.messageHandlers.glancebar.postMessage({
-                            action: 'copy',
-                            text: text
-                        });
+                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'copy', text: text });
                     },
                     openURL: function(url) {
-                        window.webkit.messageHandlers.glancebar.postMessage({
-                            action: 'openURL',
-                            url: url
-                        });
+                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'openURL', url: url });
                     },
                     saveData: function(data) {
-                        window.webkit.messageHandlers.glancebar.postMessage({
-                            action: 'saveData',
-                            data: JSON.stringify(data)
-                        });
+                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'saveData', data: JSON.stringify(data) });
+                    },
+                    exportData: function() {
+                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'exportData' });
+                    },
+                    importData: function() {
+                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'importData' });
                     }
                 };
                 """,
@@ -79,9 +76,15 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
         loadWidget()
     }
 
-    // Inject saved data after page loads
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         injectSavedData()
+        setTheme(preferencesManager.theme)
+    }
+
+    func setTheme(_ theme: String) {
+        webView.evaluateJavaScript(
+            "document.documentElement.setAttribute('data-theme', '\(theme)');"
+        ) { _, _ in }
     }
 
     private func injectSavedData() {
@@ -125,8 +128,53 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
                 try? jsonString.write(
                     toFile: dataFilePath, atomically: true, encoding: .utf8)
             }
+        case "exportData":
+            handleExport()
+        case "importData":
+            handleImport()
         default:
             break
+        }
+    }
+
+    // MARK: - Import / Export
+
+    private func handleExport() {
+        guard FileManager.default.fileExists(atPath: dataFilePath),
+            let jsonData = try? Data(contentsOf: URL(fileURLWithPath: dataFilePath))
+        else { return }
+
+        let savePanel = NSSavePanel()
+        savePanel.nameFieldStringValue = "glancebar-data.json"
+        savePanel.allowedContentTypes = [.json]
+        savePanel.canCreateDirectories = true
+        savePanel.title = "Export GlanceBar Data"
+
+        if savePanel.runModal() == .OK, let url = savePanel.url {
+            try? jsonData.write(to: url)
+            webView.evaluateJavaScript("showToast('Exported successfully')") { _, _ in }
+        }
+    }
+
+    private func handleImport() {
+        let openPanel = NSOpenPanel()
+        openPanel.allowedContentTypes = [.json]
+        openPanel.allowsMultipleSelection = false
+        openPanel.canChooseDirectories = false
+        openPanel.title = "Import GlanceBar Data"
+
+        if openPanel.runModal() == .OK, let url = openPanel.url,
+            let jsonString = try? String(contentsOf: url, encoding: .utf8)
+        {
+            // Write to data file
+            try? jsonString.write(toFile: dataFilePath, atomically: true, encoding: .utf8)
+            // Reload widget to pick up new data
+            reload()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.webView.evaluateJavaScript("showToast('Imported successfully')") {
+                    _, _ in
+                }
+            }
         }
     }
 }

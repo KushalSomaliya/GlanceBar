@@ -66,7 +66,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let prefsView = PreferencesView(preferences: preferencesManager)
+        let prefsView = PreferencesView(preferences: preferencesManager, onThemeChanged: { [weak self] in
+            self?.panelController.applyTheme()
+        })
         let hostingController = NSHostingController(rootView: prefsView)
         let window = NSWindow(contentViewController: hostingController)
         window.title = "GlanceBar Preferences"

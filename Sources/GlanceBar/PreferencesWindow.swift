@@ -2,21 +2,39 @@ import SwiftUI
 
 struct PreferencesView: View {
     let preferences: PreferencesManager
+    var onThemeChanged: (() -> Void)?
+
     @State private var selectedCorner: ScreenCorner
     @State private var panelWidth: Double
     @State private var launchAtLogin: Bool
     @State private var widgetPath: String
+    @State private var selectedTheme: String
 
-    init(preferences: PreferencesManager) {
+    init(preferences: PreferencesManager, onThemeChanged: (() -> Void)? = nil) {
         self.preferences = preferences
+        self.onThemeChanged = onThemeChanged
         _selectedCorner = State(initialValue: preferences.hotCorner)
         _panelWidth = State(initialValue: Double(preferences.panelWidth))
         _launchAtLogin = State(initialValue: preferences.launchAtLogin)
         _widgetPath = State(initialValue: preferences.widgetFilePath)
+        _selectedTheme = State(initialValue: preferences.theme)
     }
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Picker("Theme", selection: $selectedTheme) {
+                    Text("Auto (System)").tag("auto")
+                    Text("Dark").tag("dark")
+                    Text("Light").tag("light")
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: selectedTheme) { _, newValue in
+                    preferences.theme = newValue
+                    onThemeChanged?()
+                }
+            }
+
             Section("Hot Corner") {
                 Picker("Activation Corner", selection: $selectedCorner) {
                     ForEach(ScreenCorner.allCases, id: \.self) { corner in
@@ -58,18 +76,6 @@ struct PreferencesView: View {
                 }
             }
 
-            Section("Keyboard Shortcut") {
-                HStack {
-                    Text("Toggle Panel")
-                    Spacer()
-                    Text("Cmd + Shift + W")
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.quaternary)
-                        .cornerRadius(6)
-                }
-            }
-
             Section("General") {
                 Toggle("Launch at Login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in
@@ -78,6 +84,6 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420, height: 400)
+        .frame(width: 420, height: 450)
     }
 }

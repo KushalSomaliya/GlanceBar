@@ -1,5 +1,5 @@
 enum DefaultWidget {
-    static let html = """
+    static let html = ##"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -8,291 +8,368 @@ enum DefaultWidget {
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
 
+          :root {
+            --card-bg: rgba(30, 30, 30, 0.7);
+            --card-border: rgba(255,255,255,0.08);
+            --card-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            --text: #e0e0e0;
+            --text-title: rgba(255,255,255,0.9);
+            --text-muted: rgba(255,255,255,0.5);
+            --text-dim: rgba(255,255,255,0.25);
+            --text-dimmer: rgba(255,255,255,0.15);
+            --hover-bg: rgba(255,255,255,0.07);
+            --active-bg: rgba(255,255,255,0.12);
+            --input-bg: rgba(255,255,255,0.1);
+            --input-border: rgba(255,255,255,0.15);
+            --input-focus-bg: rgba(255,255,255,0.12);
+            --sep: rgba(255,255,255,0.05);
+            --menu-bg: rgba(30,30,30,0.98);
+            --menu-border: rgba(255,255,255,0.15);
+            --confirm-bg: rgba(40,40,40,0.98);
+            --btn-secondary-bg: rgba(255,255,255,0.1);
+            --btn-secondary-text: rgba(255,255,255,0.7);
+            --dashed-border: rgba(255,255,255,0.15);
+            --dashed-bg: rgba(20, 20, 20, 0.4);
+            --dashed-hover-border: rgba(255,255,255,0.3);
+            --dashed-hover-bg: rgba(20, 20, 20, 0.6);
+            --dashed-text: rgba(255,255,255,0.4);
+            --dots-color: rgba(255,255,255,0.2);
+            --drag-indicator: #0a84ff;
+            --accent: #0a84ff;
+            --accent-hover: #0070e0;
+            --danger: #ff3b30;
+            --danger-text: #ff6961;
+            --success: #34c759;
+            --handle-color: rgba(255,255,255,0.15);
+            --handle-hover: rgba(255,255,255,0.4);
+            --footer-text: rgba(255,255,255,0.15);
+            --footer-hover: rgba(255,255,255,0.35);
+          }
+
+          @media (prefers-color-scheme: light) {
+            :root:not([data-theme="dark"]) {
+              --card-bg: rgba(255, 255, 255, 0.82);
+              --card-border: rgba(0,0,0,0.06);
+              --card-shadow: 0 4px 20px rgba(0,0,0,0.1);
+              --text: #1d1d1f;
+              --text-title: rgba(0,0,0,0.85);
+              --text-muted: rgba(0,0,0,0.45);
+              --text-dim: rgba(0,0,0,0.25);
+              --text-dimmer: rgba(0,0,0,0.12);
+              --hover-bg: rgba(0,0,0,0.04);
+              --active-bg: rgba(0,0,0,0.08);
+              --input-bg: rgba(0,0,0,0.04);
+              --input-border: rgba(0,0,0,0.1);
+              --input-focus-bg: rgba(0,0,0,0.06);
+              --sep: rgba(0,0,0,0.06);
+              --menu-bg: rgba(255,255,255,0.98);
+              --menu-border: rgba(0,0,0,0.12);
+              --confirm-bg: rgba(255,255,255,0.98);
+              --btn-secondary-bg: rgba(0,0,0,0.06);
+              --btn-secondary-text: rgba(0,0,0,0.6);
+              --dashed-border: rgba(0,0,0,0.12);
+              --dashed-bg: rgba(255,255,255,0.4);
+              --dashed-hover-border: rgba(0,0,0,0.2);
+              --dashed-hover-bg: rgba(255,255,255,0.6);
+              --dashed-text: rgba(0,0,0,0.3);
+              --dots-color: rgba(0,0,0,0.15);
+              --handle-color: rgba(0,0,0,0.12);
+              --handle-hover: rgba(0,0,0,0.35);
+              --footer-text: rgba(0,0,0,0.15);
+              --footer-hover: rgba(0,0,0,0.35);
+            }
+          }
+
+          /* Forced light theme override */
+          :root[data-theme="light"] {
+            --card-bg: rgba(255, 255, 255, 0.82);
+            --card-border: rgba(0,0,0,0.06);
+            --card-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            --text: #1d1d1f;
+            --text-title: rgba(0,0,0,0.85);
+            --text-muted: rgba(0,0,0,0.45);
+            --text-dim: rgba(0,0,0,0.25);
+            --text-dimmer: rgba(0,0,0,0.12);
+            --hover-bg: rgba(0,0,0,0.04);
+            --active-bg: rgba(0,0,0,0.08);
+            --input-bg: rgba(0,0,0,0.04);
+            --input-border: rgba(0,0,0,0.1);
+            --input-focus-bg: rgba(0,0,0,0.06);
+            --sep: rgba(0,0,0,0.06);
+            --menu-bg: rgba(255,255,255,0.98);
+            --menu-border: rgba(0,0,0,0.12);
+            --confirm-bg: rgba(255,255,255,0.98);
+            --btn-secondary-bg: rgba(0,0,0,0.06);
+            --btn-secondary-text: rgba(0,0,0,0.6);
+            --dashed-border: rgba(0,0,0,0.12);
+            --dashed-bg: rgba(255,255,255,0.4);
+            --dashed-hover-border: rgba(0,0,0,0.2);
+            --dashed-hover-bg: rgba(255,255,255,0.6);
+            --dashed-text: rgba(0,0,0,0.3);
+            --dots-color: rgba(0,0,0,0.15);
+            --handle-color: rgba(0,0,0,0.12);
+            --handle-hover: rgba(0,0,0,0.35);
+            --footer-text: rgba(0,0,0,0.15);
+            --footer-hover: rgba(0,0,0,0.35);
+          }
+
           body {
             font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
             background: transparent;
-            color: #e0e0e0;
+            color: var(--text);
             padding: 48px 12px 12px 12px;
-            -webkit-user-select: none;
-            user-select: none;
+            -webkit-user-select: none; user-select: none;
           }
+
+          /* TAB BAR */
+          .tab-bar {
+            display: flex; align-items: center;
+            margin-bottom: 12px;
+            position: relative;
+          }
+          .tab-bar-tabs {
+            display: flex; align-items: center; justify-content: center;
+            gap: 4px; flex: 1;
+            overflow-x: auto;
+          }
+          .tab-bar-tabs::-webkit-scrollbar { display: none; }
+          .tab {
+            padding: 4px 14px; border-radius: 7px;
+            font-size: 11px; font-weight: 500;
+            color: var(--text-dim); cursor: pointer;
+            border: none; background: none;
+            font-family: inherit; white-space: nowrap;
+            transition: all 0.15s;
+          }
+          .tab:hover { color: var(--text-muted); }
+          .tab.active {
+            background: var(--accent); color: white;
+            box-shadow: 0 2px 8px rgba(10,132,255,0.3);
+          }
+          .tab-add {
+            padding: 4px 8px; border-radius: 6px;
+            font-size: 14px; color: var(--text-dim);
+            cursor: pointer; border: none; background: none;
+            font-family: inherit; transition: all 0.15s;
+            flex-shrink: 0; position: absolute; right: 0;
+          }
+          .tab-add:hover { color: var(--text-muted); }
+
+          .tab-rename-input {
+            background: var(--input-bg); border: 1px solid var(--accent);
+            border-radius: 6px; padding: 4px 10px; font-size: 11px;
+            color: var(--text); outline: none; font-family: inherit;
+            width: 80px; -webkit-user-select: text; user-select: text;
+            text-align: center;
+          }
+
+          /* ANIMATIONS */
+          @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
 
           .card {
-            background: rgba(20, 20, 20, 0.85);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: var(--card-bg);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.08);
+            border: 1px solid var(--card-border);
             padding: 14px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            box-shadow: var(--card-shadow);
             margin-bottom: 10px;
+            animation: scaleIn 0.25s ease;
           }
 
-          .card-header {
-            display: flex; align-items: center;
-            margin-bottom: 10px;
-          }
-
-          .card-title {
-            font-size: 13px; font-weight: 600;
-            color: rgba(255,255,255,0.9);
-            flex: 1; letter-spacing: 0.02em;
-          }
-
+          .card-header { display: flex; align-items: center; margin-bottom: 10px; }
+          .card-title { font-size: 13px; font-weight: 600; color: var(--text-title); flex: 1; letter-spacing: 0.02em; }
           .card-menu-btn {
-            width: 24px; height: 24px;
-            border: none; background: none;
-            color: rgba(255,255,255,0.3);
-            font-size: 16px; cursor: pointer;
+            width: 24px; height: 24px; border: none; background: none;
+            color: var(--text-dim); font-size: 16px; cursor: pointer;
             border-radius: 6px;
             display: flex; align-items: center; justify-content: center;
             transition: all 0.15s;
           }
-          .card-menu-btn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
+          .card-menu-btn:hover { background: var(--hover-bg); color: var(--text-muted); }
 
-          .section { margin-bottom: 8px; }
+          .section { margin-bottom: 8px; animation: fadeSlideIn 0.2s ease; }
           .section:last-child { margin-bottom: 0; }
-
           .section-header {
             display: flex; align-items: center;
             padding-bottom: 4px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            border-bottom: 1px solid var(--sep);
             margin-bottom: 3px;
           }
-
-          .section-title {
-            font-size: 9px; font-weight: 600;
-            letter-spacing: 0.08em; text-transform: uppercase;
-            color: rgba(255,255,255,0.25); flex: 1;
-          }
-
+          .section-title { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); flex: 1; }
           .section-add-btn {
-            width: 18px; height: 18px;
-            border: none; background: none;
-            color: rgba(255,255,255,0.15);
-            font-size: 15px; cursor: pointer;
+            width: 18px; height: 18px; border: none; background: none;
+            color: var(--text-dim); font-size: 15px; cursor: pointer;
             border-radius: 4px; line-height: 1;
             display: flex; align-items: center; justify-content: center;
-            transition: all 0.15s;
+            transition: all 0.15s; opacity: 0;
           }
-          .section-add-btn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); }
-          .card:hover .section-add-btn { color: rgba(255,255,255,0.3); }
+          .section:hover .section-add-btn { opacity: 1; }
+          .section-add-btn:hover { background: var(--hover-bg); color: var(--text-muted); }
 
           .row {
             position: relative;
             display: flex; align-items: center;
             padding: 5px 8px; border-radius: 6px;
             cursor: pointer; transition: background 0.15s;
+            animation: fadeSlideIn 0.2s ease;
+            border: 2px solid transparent;
           }
-          .row:hover { background: rgba(255,255,255,0.07); }
-          .row:active { background: rgba(255,255,255,0.12); }
+          .row:hover { background: var(--hover-bg); }
+          .row:active { background: var(--active-bg); }
 
-          .label { color: rgba(255,255,255,0.7); font-size: 12px; flex: 1; }
+          /* Drag handle */
+          .drag-handle {
+            width: 14px; margin-right: 4px;
+            color: var(--handle-color); font-size: 10px;
+            cursor: grab; opacity: 0; transition: opacity 0.15s;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+          }
+          .row:hover .drag-handle { opacity: 1; }
+          .drag-handle:active { cursor: grabbing; color: var(--handle-hover); }
+          .row.dragging { opacity: 0.4; }
+          .row.drag-over-top { border-top-color: var(--drag-indicator); }
+          .row.drag-over-bottom { border-bottom-color: var(--drag-indicator); }
 
+          .label { color: var(--text-muted); font-size: 12px; flex: 1; }
           .value {
-            font-size: 11px;
-            font-family: 'SF Mono', Menlo, monospace;
-            color: rgba(255,255,255,0.5);
-            transition: all 0.25s ease;
+            font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
+            color: var(--text-muted); transition: all 0.25s ease;
           }
-          .row:hover .value { color: rgba(255,255,255,0.9); }
-          .value.copied {
-            color: #34c759 !important;
-            font-family: -apple-system, sans-serif;
-            font-weight: 500;
-          }
+          .row:hover .value { color: var(--text-title); }
+          .value.copied { color: var(--success) !important; font-family: -apple-system, sans-serif; font-weight: 500; }
 
-          /* Hidden values mode */
-          .value-dots {
-            font-size: 11px;
-            color: rgba(255,255,255,0.2);
-            letter-spacing: 2px;
-          }
+          .value-dots { font-size: 11px; color: var(--dots-color); letter-spacing: 2px; }
           .value-real { display: none; }
           .row:hover .value-dots { display: none; }
           .row:hover .value-real { display: inline; }
 
           /* Select mode */
           .select-checkbox {
-            width: 16px; height: 16px; margin-right: 8px;
-            border-radius: 4px;
-            border: 1.5px solid rgba(255,255,255,0.25);
-            background: none; cursor: pointer;
+            width: 16px; height: 16px; margin-right: 8px; border-radius: 4px;
+            border: 1.5px solid var(--text-dim); background: none; cursor: pointer;
             display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0; transition: all 0.15s;
-            font-size: 10px; color: transparent;
+            flex-shrink: 0; transition: all 0.15s; font-size: 10px; color: transparent;
           }
-          .select-checkbox:hover { border-color: rgba(255,255,255,0.5); }
-          .select-checkbox.checked {
-            background: #0a84ff; border-color: #0a84ff; color: white;
-          }
-
+          .select-checkbox:hover { border-color: var(--text-muted); }
+          .select-checkbox.checked { background: var(--accent); border-color: var(--accent); color: white; }
           .section-select-checkbox {
-            width: 14px; height: 14px; margin-right: 6px;
-            border-radius: 3px;
-            border: 1.5px solid rgba(255,255,255,0.2);
-            background: none; cursor: pointer;
+            width: 14px; height: 14px; margin-right: 6px; border-radius: 3px;
+            border: 1.5px solid var(--text-dimmer); background: none; cursor: pointer;
             display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0; transition: all 0.15s;
-            font-size: 8px; color: transparent;
+            flex-shrink: 0; transition: all 0.15s; font-size: 8px; color: transparent;
           }
-          .section-select-checkbox:hover { border-color: rgba(255,255,255,0.4); }
-          .section-select-checkbox.checked {
-            background: #0a84ff; border-color: #0a84ff; color: white;
-          }
+          .section-select-checkbox:hover { border-color: var(--text-dim); }
+          .section-select-checkbox.checked { background: var(--accent); border-color: var(--accent); color: white; }
 
-          /* Select mode bar */
           .select-bar {
             position: fixed; bottom: 0; left: 0; right: 0;
-            background: rgba(20,20,20,0.95);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(255,255,255,0.1);
-            padding: 10px 16px;
-            display: flex; align-items: center; gap: 8px;
-            z-index: 900;
+            background: var(--card-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid var(--card-border); padding: 10px 16px;
+            display: flex; align-items: center; gap: 8px; z-index: 900;
+            animation: fadeSlideIn 0.2s ease;
           }
-          .select-bar-text {
-            flex: 1; font-size: 12px;
-            color: rgba(255,255,255,0.6);
-          }
-          .select-bar-count {
-            color: #0a84ff; font-weight: 600;
-          }
+          .select-bar-text { flex: 1; font-size: 12px; color: var(--text-muted); }
+          .select-bar-count { color: var(--accent); font-weight: 600; }
 
-          .btn {
-            padding: 5px 12px; border: none;
-            border-radius: 6px; font-size: 11px;
-            cursor: pointer; font-weight: 500; font-family: inherit;
-            transition: all 0.15s;
-          }
-          .btn-primary { background: #0a84ff; color: white; }
-          .btn-primary:hover { background: #0070e0; }
-          .btn-secondary { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
-          .btn-secondary:hover { background: rgba(255,255,255,0.15); }
-          .btn-danger { background: #ff3b30; color: white; }
-          .btn-danger:hover { background: #e0352b; }
+          .btn { padding: 5px 12px; border: none; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 500; font-family: inherit; transition: all 0.15s; }
+          .btn-primary { background: var(--accent); color: white; }
+          .btn-primary:hover { background: var(--accent-hover); }
+          .btn-secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); }
+          .btn-secondary:hover { opacity: 0.8; }
+          .btn-danger { background: var(--danger); color: white; }
+          .btn-danger:hover { opacity: 0.9; }
 
-          /* Inline forms */
-          .inline-form {
-            display: none;
-            padding: 6px 8px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 6px; margin-top: 4px;
-          }
-          .inline-form.show { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+          .inline-form { display: none; padding: 6px 8px; background: var(--hover-bg); border-radius: 6px; margin-top: 4px; }
+          .inline-form.show { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; animation: fadeSlideIn 0.2s ease; }
           .inline-form input, .card-form input {
-            flex: 1; min-width: 60px;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 6px; padding: 6px 10px;
-            font-size: 12px; color: white;
-            outline: none; font-family: inherit;
-            -webkit-user-select: text; user-select: text;
+            flex: 1; min-width: 60px; background: var(--input-bg); border: 1px solid var(--input-border);
+            border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--text);
+            outline: none; font-family: inherit; -webkit-user-select: text; user-select: text;
           }
-          .inline-form input:focus, .card-form input:focus {
-            border-color: #0a84ff; background: rgba(255,255,255,0.12);
-          }
-          .inline-form input::placeholder, .card-form input::placeholder {
-            color: rgba(255,255,255,0.3);
-          }
+          .inline-form input:focus, .card-form input:focus { border-color: var(--accent); background: var(--input-focus-bg); }
+          .inline-form input::placeholder, .card-form input::placeholder { color: var(--text-dim); }
 
           .add-card-btn {
             width: 100%; padding: 12px;
-            border: 2px dashed rgba(255,255,255,0.15);
-            background: rgba(20, 20, 20, 0.4);
-            color: rgba(255,255,255,0.4);
-            border-radius: 14px; cursor: pointer;
-            font-size: 13px; font-family: inherit; font-weight: 500;
-            transition: all 0.15s;
+            border: 2px dashed var(--dashed-border); background: var(--dashed-bg);
+            color: var(--dashed-text); border-radius: 14px; cursor: pointer;
+            font-size: 13px; font-family: inherit; font-weight: 500; transition: all 0.15s;
             display: flex; align-items: center; justify-content: center; gap: 6px;
           }
-          .add-card-btn:hover {
-            border-color: rgba(255,255,255,0.3);
-            color: rgba(255,255,255,0.7);
-            background: rgba(20, 20, 20, 0.6);
-          }
+          .add-card-btn:hover { border-color: var(--dashed-hover-border); color: var(--text-muted); background: var(--dashed-hover-bg); }
 
           .card-form {
-            display: none;
-            background: rgba(20, 20, 20, 0.85);
+            display: none; background: var(--card-bg);
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.08);
-            padding: 14px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-            margin-bottom: 10px;
+            border-radius: 14px; border: 1px solid var(--card-border);
+            padding: 14px; box-shadow: var(--card-shadow); margin-bottom: 10px;
           }
-          .card-form.show { display: block; }
-          .card-form-title { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.6); margin-bottom: 10px; }
+          .card-form.show { display: block; animation: scaleIn 0.2s ease; }
+          .card-form-title { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 10px; }
           .card-form .form-row { display: flex; gap: 6px; margin-bottom: 8px; }
           .card-form .form-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
-          /* Confirm dialog */
           .confirm-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
-            display: none; z-index: 1100;
+            background: rgba(0,0,0,0.5); display: none; z-index: 1100;
             align-items: center; justify-content: center;
           }
           .confirm-overlay.show { display: flex; }
           .confirm-box {
-            background: rgba(40,40,40,0.98);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 14px; padding: 18px;
-            max-width: 300px; width: 90%;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+            background: var(--confirm-bg); border: 1px solid var(--menu-border);
+            border-radius: 14px; padding: 18px; max-width: 300px; width: 90%;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6); animation: scaleIn 0.2s ease;
           }
-          .confirm-title { font-size: 14px; font-weight: 600; color: white; margin-bottom: 8px; }
-          .confirm-body { font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 14px; line-height: 1.5; }
-          .confirm-body .item-label {
-            display: block; padding: 3px 0;
-            color: rgba(255,255,255,0.8);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-          }
+          .confirm-title { font-size: 14px; font-weight: 600; color: var(--text-title); margin-bottom: 8px; }
+          .confirm-body { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5; }
+          .confirm-body .item-label { display: block; padding: 3px 0; color: var(--text); border-bottom: 1px solid var(--sep); }
           .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
           .context-menu {
-            position: fixed;
-            background: rgba(30,30,30,0.98);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 8px; padding: 4px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-            z-index: 1000; min-width: 170px;
-            display: none;
+            position: fixed; background: var(--menu-bg); border: 1px solid var(--menu-border);
+            border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            z-index: 1000; min-width: 170px; display: none;
           }
-          .context-menu.show { display: block; }
+          .context-menu.show { display: block; animation: scaleIn 0.15s ease; }
           .context-menu-item {
-            padding: 6px 12px; border-radius: 4px;
-            font-size: 12px; cursor: pointer;
-            color: rgba(255,255,255,0.8);
-            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;
+            color: var(--text); display: flex; align-items: center; gap: 6px;
           }
-          .context-menu-item:hover { background: rgba(255,255,255,0.1); }
-          .context-menu-item.danger { color: #ff6961; }
-          .context-menu-item.danger:hover { background: rgba(255,59,48,0.15); }
-          .context-menu-sep { height: 1px; background: rgba(255,255,255,0.08); margin: 3px 8px; }
+          .context-menu-item:hover { background: var(--hover-bg); }
+          .context-menu-item.danger { color: var(--danger-text); }
+          .context-menu-item.danger:hover { background: rgba(255,59,48,0.1); }
+          .context-menu-sep { height: 1px; background: var(--sep); margin: 3px 8px; }
           .context-menu-toggle {
-            margin-left: auto;
-            width: 32px; height: 18px;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.15);
-            position: relative; transition: background 0.2s;
+            margin-left: auto; width: 32px; height: 18px; border-radius: 10px;
+            background: var(--btn-secondary-bg); position: relative; transition: background 0.2s;
           }
-          .context-menu-toggle.on { background: #34c759; }
+          .context-menu-toggle.on { background: var(--success); }
           .context-menu-toggle::after {
-            content: ''; position: absolute;
-            width: 14px; height: 14px; border-radius: 50%;
-            background: white; top: 2px; left: 2px;
-            transition: transform 0.2s;
+            content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%;
+            background: white; top: 2px; left: 2px; transition: transform 0.2s;
           }
           .context-menu-toggle.on::after { transform: translateX(14px); }
+
+          .footer-links {
+            display: flex; justify-content: center; gap: 12px;
+            padding: 12px 0 4px; font-size: 10px;
+          }
+          .footer-link {
+            color: var(--footer-text); cursor: pointer;
+            border: none; background: none; font-family: inherit; font-size: 10px;
+            transition: color 0.15s;
+          }
+          .footer-link:hover { color: var(--footer-hover); }
 
           .toast {
             position: fixed; bottom: 20px; left: 50%;
             transform: translateX(-50%) translateY(20px);
-            background: rgba(52, 199, 89, 0.95);
-            color: white; padding: 6px 16px; border-radius: 20px;
+            background: rgba(52, 199, 89, 0.95); color: white;
+            padding: 6px 16px; border-radius: 20px;
             font-size: 12px; font-weight: 500;
             opacity: 0; transition: all 0.3s ease;
             pointer-events: none; z-index: 1200;
@@ -308,347 +385,413 @@ enum DefaultWidget {
 
           <script>
             var DEFAULT_DATA = {
-              cards: [
+              pages: [
                 {
-                  id: 'card_1', title: 'Quick Reference', hideValues: false,
-                  sections: [
-                    { id: 's1', title: 'Wi-Fi', items: [
-                      { id: 'i1', label: 'Home Network', value: 'MyWiFi_5G' },
-                      { id: 'i2', label: 'Password', value: 'super-secret-password' },
-                    ]},
-                    { id: 's2', title: 'Addresses', items: [
-                      { id: 'i3', label: 'Home', value: '123 Main St, Apt 4B' },
-                      { id: 'i4', label: 'Office', value: '456 Work Ave, Floor 3' },
-                    ]},
-                    { id: 's3', title: 'Misc', items: [
-                      { id: 'i5', label: 'Laptop Serial', value: 'C02XG0F1JGH5' },
-                      { id: 'i6', label: 'License Key', value: 'XXXX-YYYY-ZZZZ-1234' },
-                    ]},
+                  id: 'page_1', name: 'Main',
+                  cards: [
+                    {
+                      id: 'card_1', title: 'Quick Reference', hideValues: false,
+                      sections: [
+                        { id: 's1', title: 'Wi-Fi', items: [
+                          { id: 'i1', label: 'Home Network', value: 'MyWiFi_5G' },
+                          { id: 'i2', label: 'Password', value: 'super-secret-password' },
+                        ]},
+                        { id: 's2', title: 'Addresses', items: [
+                          { id: 'i3', label: 'Home', value: '123 Main St, Apt 4B' },
+                          { id: 'i4', label: 'Office', value: '456 Work Ave, Floor 3' },
+                        ]},
+                        { id: 's3', title: 'Misc', items: [
+                          { id: 'i5', label: 'Laptop Serial', value: 'C02XG0F1JGH5' },
+                          { id: 'i6', label: 'License Key', value: 'XXXX-YYYY-ZZZZ-1234' },
+                        ]},
+                      ]
+                    }
                   ]
                 }
               ]
             };
 
             var data = JSON.parse(JSON.stringify(DEFAULT_DATA));
-            var selectMode = false;
-            var selectCardId = null;
-            var selected = {};  // { itemId: true, sectionId: true }
+            var activePageId = null;
+            var selectMode = false, selectCardId = null, selected = {};
+
+            // Drag state
+            var dragType = null, dragCardId = null, dragSectionId = null, dragItemId = null;
 
             function uid() { return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
             function save() { if (window.GlanceBar) GlanceBar.saveData(data); }
-            window._onDataLoaded = function(saved) { if (saved && saved.cards) { data = saved; render(); } };
+            function activePage() { return data.pages.find(function(p){ return p.id === activePageId; }) || data.pages[0]; }
 
+            window._onDataLoaded = function(saved) {
+              if (!saved) return;
+              // Migrate old format: { cards: [...] } → { pages: [{ cards: [...] }] }
+              if (saved.cards && !saved.pages) {
+                data = { pages: [{ id: uid(), name: 'Main', cards: saved.cards }] };
+                save();
+              } else if (saved.pages) {
+                data = saved;
+              }
+              activePageId = data.pages[0] ? data.pages[0].id : null;
+              render();
+            };
             function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+            function showToast(msg) { var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); }, 1500); }
 
+            // ===== RENDER =====
             function render() {
+              if (!activePageId && data.pages.length) activePageId = data.pages[0].id;
+              var page = activePage();
               var app = document.getElementById('app');
-              var html = data.cards.map(function(card) { return renderCard(card); }).join('');
-              html += '<div class="card-form" id="newCardForm">' +
-                '<div class="card-form-title">New Card</div>' +
+              var html = renderTabBar();
+              if (page) {
+                html += page.cards.map(function(card) { return renderCard(card); }).join('');
+              }
+              html += '<div class="card-form" id="newCardForm"><div class="card-form-title">New Card</div>' +
                 '<div class="form-row"><input id="newCardTitle" placeholder="Card name (e.g. Passwords)"></div>' +
                 '<div class="form-row"><input id="newCardSection" placeholder="First section name (e.g. Email)"></div>' +
-                '<div class="form-actions">' +
-                  '<button class="btn btn-secondary" onclick="hideNewCardForm()">Cancel</button>' +
-                  '<button class="btn btn-primary" onclick="submitNewCard()">Create</button>' +
-                '</div></div>';
+                '<div class="form-actions"><button class="btn btn-secondary" onclick="hideNewCardForm()">Cancel</button>' +
+                '<button class="btn btn-primary" onclick="submitNewCard()">Create</button></div></div>';
               html += '<button class="add-card-btn" onclick="showNewCardForm()">+ Add Card</button>';
+              html += '<div class="footer-links">' +
+                '<button class="footer-link" onclick="GlanceBar.exportData()">Export</button>' +
+                '<span style="color:var(--footer-text)">|</span>' +
+                '<button class="footer-link" onclick="GlanceBar.importData()">Import</button></div>';
               if (selectMode) {
                 var count = Object.keys(selected).length;
-                html += '<div class="select-bar">' +
-                  '<span class="select-bar-text"><span class="select-bar-count">' + count + '</span> selected</span>' +
+                html += '<div class="select-bar"><span class="select-bar-text"><span class="select-bar-count">' + count + '</span> selected</span>' +
                   '<button class="btn btn-secondary" onclick="exitSelectMode()">Cancel</button>' +
-                  '<button class="btn btn-danger" onclick="confirmDeleteSelected()" ' + (count === 0 ? 'style="opacity:0.4;pointer-events:none"' : '') + '>Delete</button>' +
-                '</div>';
+                  '<button class="btn btn-danger" onclick="confirmDeleteSelected()" ' + (count===0?'style="opacity:0.4;pointer-events:none"':'') + '>Delete</button></div>';
               }
               app.innerHTML = html;
             }
 
-            function renderCard(card) {
-              var isSelectingThis = selectMode && selectCardId === card.id;
-              return '<div class="card" data-card="' + card.id + '">' +
-                '<div class="card-header">' +
-                  '<div class="card-title">' + esc(card.title) + '</div>' +
-                  '<button class="card-menu-btn" onclick="showCardMenu(event,\\'' + card.id + '\\')">\\u2026</button>' +
-                '</div>' +
-                card.sections.map(function(s) { return renderSection(card.id, s, card.hideValues, isSelectingThis); }).join('') +
-                '<div class="card-form" id="newSectionForm_' + card.id + '">' +
-                  '<div class="card-form-title">New Section</div>' +
-                  '<div class="form-row"><input id="newSectionTitle_' + card.id + '" placeholder="Section name"></div>' +
-                  '<div class="form-actions">' +
-                    '<button class="btn btn-secondary" onclick="hideNewSectionForm(\\'' + card.id + '\\')">Cancel</button>' +
-                    '<button class="btn btn-primary" onclick="submitNewSection(\\'' + card.id + '\\')">Add</button>' +
-                  '</div></div>' +
-                '<div class="card-form" id="renameForm_' + card.id + '">' +
-                  '<div class="card-form-title">Rename Card</div>' +
-                  '<div class="form-row"><input id="renameInput_' + card.id + '" placeholder="New name" value="' + esc(card.title) + '"></div>' +
-                  '<div class="form-actions">' +
-                    '<button class="btn btn-secondary" onclick="hideRenameForm(\\'' + card.id + '\\')">Cancel</button>' +
-                    '<button class="btn btn-primary" onclick="submitRename(\\'' + card.id + '\\')">Save</button>' +
-                  '</div></div>' +
-              '</div>';
+            function renderTabBar() {
+              if (data.pages.length <= 1 && !data.pages[0]) return '';
+              var html = '<div class="tab-bar"><div class="tab-bar-tabs">';
+              data.pages.forEach(function(p) {
+                html += '<button class="tab' + (p.id===activePageId?' active':'') + '" ' +
+                  'onclick="switchPage(\'' + p.id + '\')" ' +
+                  'oncontextmenu="showTabContextMenu(event,\'' + p.id + '\')">' + esc(p.name) + '</button>';
+              });
+              html += '</div>';
+              html += '<button class="tab-add" onclick="addPage()">+</button>';
+              html += '</div>';
+              return html;
             }
 
-            function renderSection(cardId, section, hideValues, isSelecting) {
-              var secChecked = isSelecting && selected['sec_' + section.id];
+            function renderCard(card) {
+              var isSel = selectMode && selectCardId === card.id;
+              return '<div class="card" data-card="' + card.id + '">' +
+                '<div class="card-header"><div class="card-title">' + esc(card.title) + '</div>' +
+                '<button class="card-menu-btn" onclick="showCardMenu(event,\'' + card.id + '\')">\u2026</button></div>' +
+                card.sections.map(function(s) { return renderSection(card.id, s, card.hideValues, isSel); }).join('') +
+                '<div class="card-form" id="newSectionForm_' + card.id + '"><div class="card-form-title">New Section</div>' +
+                '<div class="form-row"><input id="newSectionTitle_' + card.id + '" placeholder="Section name"></div>' +
+                '<div class="form-actions"><button class="btn btn-secondary" onclick="hideNewSectionForm(\'' + card.id + '\')">Cancel</button>' +
+                '<button class="btn btn-primary" onclick="submitNewSection(\'' + card.id + '\')">Add</button></div></div>' +
+                '<div class="card-form" id="renameForm_' + card.id + '"><div class="card-form-title">Rename Card</div>' +
+                '<div class="form-row"><input id="renameInput_' + card.id + '" placeholder="New name" value="' + esc(card.title) + '"></div>' +
+                '<div class="form-actions"><button class="btn btn-secondary" onclick="hideRenameForm(\'' + card.id + '\')">Cancel</button>' +
+                '<button class="btn btn-primary" onclick="submitRename(\'' + card.id + '\')">Save</button></div></div></div>';
+            }
+
+            function renderSection(cardId, section, hideValues, isSel) {
+              var sc = isSel && selected['sec_' + section.id];
               return '<div class="section" data-section="' + section.id + '">' +
                 '<div class="section-header">' +
-                  (isSelecting ? '<div class="section-select-checkbox' + (secChecked ? ' checked' : '') + '" onclick="toggleSelectSection(\\'' + section.id + '\\')">' + (secChecked ? '\\u2713' : '') + '</div>' : '') +
-                  '<div class="section-title">' + esc(section.title) + '</div>' +
-                  (isSelecting ? '' : '<button class="section-add-btn" onclick="showAddEntryForm(\\'' + cardId + '\\',\\'' + section.id + '\\')">+</button>') +
+                (isSel ? '<div class="section-select-checkbox' + (sc?' checked':'') + '" onclick="toggleSelectSection(\'' + section.id + '\')">' + (sc?'\u2713':'') + '</div>' : '') +
+                '<div class="section-title">' + esc(section.title) + '</div>' +
+                (isSel ? '' : '<button class="section-add-btn" onclick="showAddEntryForm(\'' + cardId + '\',\'' + section.id + '\')">+</button>') +
                 '</div>' +
-                section.items.map(function(item) { return renderRow(cardId, section.id, item, hideValues, isSelecting); }).join('') +
+                section.items.map(function(item, idx) { return renderRow(cardId, section.id, item, hideValues, isSel, idx); }).join('') +
                 '<div class="inline-form" id="entryForm_' + section.id + '">' +
-                  '<input id="inp_label_' + section.id + '" placeholder="Label">' +
-                  '<input id="inp_value_' + section.id + '" placeholder="Value">' +
-                  '<button class="btn btn-primary" onclick="submitEntry(\\'' + cardId + '\\',\\'' + section.id + '\\')">Add</button>' +
-                  '<button class="btn btn-secondary" onclick="hideAddEntryForm(\\'' + section.id + '\\')">Cancel</button>' +
-                '</div></div>';
+                '<input id="inp_label_' + section.id + '" placeholder="Label">' +
+                '<input id="inp_value_' + section.id + '" placeholder="Value">' +
+                '<button class="btn btn-primary" onclick="submitEntry(\'' + cardId + '\',\'' + section.id + '\')">Add</button>' +
+                '<button class="btn btn-secondary" onclick="hideAddEntryForm(\'' + section.id + '\')">Cancel</button></div></div>';
             }
 
-            function renderRow(cardId, sectionId, item, hideValues, isSelecting) {
-              var safeVal = item.value.replace(/'/g, "\\\\'");
-              var isChecked = isSelecting && selected[item.id];
+            function renderRow(cardId, sectionId, item, hideValues, isSel, idx) {
+              var sv = item.value.replace(/'/g, "\\'");
+              var chk = isSel && selected[item.id];
               var valHtml;
               if (hideValues) {
-                valHtml = '<span class="value-dots">\\u2022\\u2022\\u2022\\u2022\\u2022\\u2022</span>' +
-                          '<span class="value value-real">' + esc(item.value) + '</span>';
+                valHtml = '<span class="value-dots">\u2022\u2022\u2022\u2022\u2022\u2022</span><span class="value value-real">' + esc(item.value) + '</span>';
               } else {
                 valHtml = '<span class="value">' + esc(item.value) + '</span>';
               }
-              if (isSelecting) {
-                return '<div class="row" onclick="toggleSelectItem(\\'' + item.id + '\\')">' +
-                  '<div class="select-checkbox' + (isChecked ? ' checked' : '') + '">' + (isChecked ? '\\u2713' : '') + '</div>' +
-                  '<span class="label">' + esc(item.label) + '</span>' +
-                  valHtml + '</div>';
+              if (isSel) {
+                return '<div class="row" onclick="toggleSelectItem(\'' + item.id + '\')">' +
+                  '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
+                  '<span class="label">' + esc(item.label) + '</span>' + valHtml + '</div>';
               }
-              return '<div class="row" onclick="copyValue(this,\\'' + safeVal + '\\','+hideValues+')" data-val="' + esc(item.value) + '">' +
-                '<span class="label">' + esc(item.label) + '</span>' +
-                valHtml + '</div>';
+              return '<div class="row" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" data-idx="' + idx + '" ' +
+                'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
+                'onclick="copyValue(this,\'' + sv + '\',' + hideValues + ')">' +
+                '<span class="drag-handle">\u2630</span>' +
+                '<span class="label">' + esc(item.label) + '</span>' + valHtml + '</div>';
             }
 
-            // COPY
+            // ===== DRAG & DROP =====
+            function onDragStart(e) {
+              var row = e.currentTarget;
+              dragCardId = row.dataset.card;
+              dragSectionId = row.dataset.section;
+              dragItemId = row.dataset.item;
+              row.classList.add('dragging');
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', dragItemId);
+            }
+            function onDragEnd(e) {
+              e.currentTarget.classList.remove('dragging');
+              clearDragIndicators();
+              dragCardId = null; dragSectionId = null; dragItemId = null;
+            }
+            function onDragOver(e) {
+              e.preventDefault();
+              var row = e.currentTarget;
+              if (row.dataset.section !== dragSectionId || row.dataset.item === dragItemId) return;
+              clearDragIndicators();
+              var rect = row.getBoundingClientRect();
+              var midY = rect.top + rect.height / 2;
+              if (e.clientY < midY) row.classList.add('drag-over-top');
+              else row.classList.add('drag-over-bottom');
+            }
+            function onDragLeave(e) { e.currentTarget.classList.remove('drag-over-top', 'drag-over-bottom'); }
+            function onDrop(e) {
+              e.preventDefault();
+              var targetRow = e.currentTarget;
+              if (targetRow.dataset.section !== dragSectionId) return;
+              var card = activePage().cards.find(function(c){ return c.id === dragCardId; });
+              var section = card && card.sections.find(function(s){ return s.id === dragSectionId; });
+              if (!section) return;
+              var fromIdx = section.items.findIndex(function(i){ return i.id === dragItemId; });
+              var toIdx = parseInt(targetRow.dataset.idx);
+              var rect = targetRow.getBoundingClientRect();
+              if (e.clientY > rect.top + rect.height / 2) toIdx++;
+              if (fromIdx === toIdx || fromIdx < 0) return;
+              var item = section.items.splice(fromIdx, 1)[0];
+              if (toIdx > fromIdx) toIdx--;
+              section.items.splice(toIdx, 0, item);
+              save(); render();
+            }
+            function clearDragIndicators() {
+              document.querySelectorAll('.drag-over-top,.drag-over-bottom').forEach(function(el) {
+                el.classList.remove('drag-over-top', 'drag-over-bottom');
+              });
+            }
+
+            // ===== COPY =====
             function copyValue(row, text, isHidden) {
               if (selectMode) return;
               if (window.GlanceBar) GlanceBar.copy(text);
               else navigator.clipboard.writeText(text).catch(function(){});
-              // Save original HTML of the value area
               var dotsEl = row.querySelector('.value-dots');
               var realEl = row.querySelector('.value-real');
               var plainEl = (!dotsEl) ? row.querySelector('.value') : null;
-              // Show "Copied" feedback
               if (dotsEl) dotsEl.style.display = 'none';
               if (realEl) { realEl.style.display = 'inline'; realEl.textContent = 'Copied'; realEl.classList.add('copied'); }
-              if (plainEl) { var orig = plainEl.textContent; plainEl.textContent = 'Copied'; plainEl.classList.add('copied');
-                setTimeout(function() { plainEl.textContent = orig; plainEl.classList.remove('copied'); }, 1200); return;
-              }
-              setTimeout(function() {
+              if (plainEl) { var o = plainEl.textContent; plainEl.textContent = 'Copied'; plainEl.classList.add('copied');
+                setTimeout(function(){ plainEl.textContent = o; plainEl.classList.remove('copied'); }, 1200); return; }
+              setTimeout(function(){
                 if (dotsEl) dotsEl.style.display = '';
                 if (realEl) { realEl.style.display = ''; realEl.textContent = text; realEl.classList.remove('copied'); }
               }, 1200);
             }
 
-            // SELECT MODE
-            function enterSelectMode(cardId) {
-              selectMode = true; selectCardId = cardId; selected = {};
-              hideContextMenu(); render();
-            }
-            function exitSelectMode() {
-              selectMode = false; selectCardId = null; selected = {};
+            // ===== SELECT MODE =====
+            function enterSelectMode(cardId) { selectMode = true; selectCardId = cardId; selected = {}; hideContextMenu(); render(); }
+            function exitSelectMode() { selectMode = false; selectCardId = null; selected = {}; render(); }
+            function toggleSelectItem(id) { if (selected[id]) delete selected[id]; else selected[id] = true; render(); }
+            function toggleSelectSection(sid) {
+              var k = 'sec_' + sid;
+              var card = activePage().cards.find(function(c){ return c.id === selectCardId; });
+              var sec = card && card.sections.find(function(s){ return s.id === sid; });
+              if (!sec) return;
+              if (selected[k]) { delete selected[k]; sec.items.forEach(function(i){ delete selected[i.id]; }); }
+              else { selected[k] = true; sec.items.forEach(function(i){ selected[i.id] = true; }); }
               render();
             }
-            function toggleSelectItem(itemId) {
-              if (selected[itemId]) delete selected[itemId];
-              else selected[itemId] = true;
-              render();
-            }
-            function toggleSelectSection(sectionId) {
-              var key = 'sec_' + sectionId;
-              var card = data.cards.find(function(c) { return c.id === selectCardId; });
-              var section = card && card.sections.find(function(s) { return s.id === sectionId; });
-              if (!section) return;
-              if (selected[key]) {
-                delete selected[key];
-                section.items.forEach(function(i) { delete selected[i.id]; });
-              } else {
-                selected[key] = true;
-                section.items.forEach(function(i) { selected[i.id] = true; });
-              }
-              render();
-            }
-
             function confirmDeleteSelected() {
-              var card = data.cards.find(function(c) { return c.id === selectCardId; });
+              var card = activePage().cards.find(function(c){ return c.id === selectCardId; });
               if (!card) return;
-              var labels = [];
-              var sectionLabels = [];
-              card.sections.forEach(function(s) {
-                if (selected['sec_' + s.id]) {
-                  sectionLabels.push(s.title + ' (entire section)');
-                } else {
-                  s.items.forEach(function(i) {
-                    if (selected[i.id]) labels.push(i.label);
-                  });
-                }
+              var labels = [], sLabels = [];
+              card.sections.forEach(function(s){
+                if (selected['sec_'+s.id]) sLabels.push(s.title+' (entire section)');
+                else s.items.forEach(function(i){ if (selected[i.id]) labels.push(i.label); });
               });
-              var all = sectionLabels.concat(labels);
-              if (all.length === 0) return;
-              showConfirm(
-                'Delete ' + all.length + ' item' + (all.length > 1 ? 's' : '') + '?',
-                all.map(function(l) { return '<span class="item-label">' + esc(l) + '</span>'; }).join(''),
-                function() {
-                  card.sections.forEach(function(s) {
-                    if (selected['sec_' + s.id]) { s.items = []; s._delete = true; }
-                    else { s.items = s.items.filter(function(i) { return !selected[i.id]; }); }
-                  });
-                  card.sections = card.sections.filter(function(s) { return !s._delete; });
+              var all = sLabels.concat(labels);
+              if (!all.length) return;
+              showConfirm('Delete ' + all.length + ' item' + (all.length>1?'s':'') + '?',
+                all.map(function(l){ return '<span class="item-label">'+esc(l)+'</span>'; }).join(''),
+                function(){
+                  card.sections.forEach(function(s){ if (selected['sec_'+s.id]){s.items=[];s._del=true;} else s.items=s.items.filter(function(i){return !selected[i.id];}); });
+                  card.sections = card.sections.filter(function(s){return !s._del;});
                   save(); exitSelectMode();
-                }
-              );
+                });
             }
 
-            // CONFIRM DIALOG
-            function showConfirm(title, bodyHtml, onConfirm) {
+            // ===== CONFIRM =====
+            function showConfirm(title, body, onOk) {
               var box = document.getElementById('confirmBox');
-              box.innerHTML = '<div class="confirm-title">' + title + '</div>' +
-                '<div class="confirm-body">' + bodyHtml + '</div>' +
-                '<div class="confirm-actions">' +
-                  '<button class="btn btn-secondary" id="confirmCancel">Cancel</button>' +
-                  '<button class="btn btn-danger" id="confirmOk">Delete</button>' +
-                '</div>';
+              box.innerHTML = '<div class="confirm-title">'+title+'</div><div class="confirm-body">'+body+'</div>' +
+                '<div class="confirm-actions"><button class="btn btn-secondary" id="cCancel">Cancel</button><button class="btn btn-danger" id="cOk">Delete</button></div>';
               document.getElementById('confirmOverlay').classList.add('show');
-              document.getElementById('confirmCancel').onclick = hideConfirm;
-              document.getElementById('confirmOk').onclick = function() { hideConfirm(); onConfirm(); };
+              document.getElementById('cCancel').onclick = hideConfirm;
+              document.getElementById('cOk').onclick = function(){ hideConfirm(); onOk(); };
             }
-            function hideConfirm() {
-              document.getElementById('confirmOverlay').classList.remove('show');
-            }
+            function hideConfirm() { document.getElementById('confirmOverlay').classList.remove('show'); }
 
-            // ADD ENTRY
-            function showAddEntryForm(cardId, sectionId) {
-              var form = document.getElementById('entryForm_' + sectionId);
-              form.classList.add('show');
-              setTimeout(function() { document.getElementById('inp_label_' + sectionId).focus(); }, 50);
+            // ===== FORMS =====
+            function showAddEntryForm(cid, sid) { document.getElementById('entryForm_'+sid).classList.add('show'); setTimeout(function(){ document.getElementById('inp_label_'+sid).focus(); },50); }
+            function hideAddEntryForm(sid) { document.getElementById('entryForm_'+sid).classList.remove('show'); }
+            function submitEntry(cid, sid) {
+              var l = document.getElementById('inp_label_'+sid).value.trim(), v = document.getElementById('inp_value_'+sid).value.trim();
+              if (!l||!v) return;
+              var c = activePage().cards.find(function(x){return x.id===cid;}), s = c&&c.sections.find(function(x){return x.id===sid;});
+              if (s) { s.items.push({id:uid(),label:l,value:v}); save(); render(); }
             }
-            function hideAddEntryForm(sectionId) { document.getElementById('entryForm_' + sectionId).classList.remove('show'); }
-            function submitEntry(cardId, sectionId) {
-              var label = document.getElementById('inp_label_' + sectionId).value.trim();
-              var value = document.getElementById('inp_value_' + sectionId).value.trim();
-              if (!label || !value) return;
-              var card = data.cards.find(function(c) { return c.id === cardId; });
-              var section = card && card.sections.find(function(s) { return s.id === sectionId; });
-              if (!section) return;
-              section.items.push({ id: uid(), label: label, value: value });
-              save(); render();
+            function showNewSectionForm(cid) { hideContextMenu(); document.getElementById('newSectionForm_'+cid).classList.add('show'); setTimeout(function(){ document.getElementById('newSectionTitle_'+cid).focus(); },50); }
+            function hideNewSectionForm(cid) { document.getElementById('newSectionForm_'+cid).classList.remove('show'); }
+            function submitNewSection(cid) {
+              var t = document.getElementById('newSectionTitle_'+cid).value.trim(); if (!t) return;
+              var c = activePage().cards.find(function(x){return x.id===cid;});
+              if (c) { c.sections.push({id:uid(),title:t,items:[]}); save(); render(); }
             }
-
-            // ADD SECTION
-            function showNewSectionForm(cardId) {
-              hideContextMenu();
-              document.getElementById('newSectionForm_' + cardId).classList.add('show');
-              setTimeout(function() { document.getElementById('newSectionTitle_' + cardId).focus(); }, 50);
-            }
-            function hideNewSectionForm(cardId) { document.getElementById('newSectionForm_' + cardId).classList.remove('show'); }
-            function submitNewSection(cardId) {
-              var title = document.getElementById('newSectionTitle_' + cardId).value.trim();
-              if (!title) return;
-              var card = data.cards.find(function(c) { return c.id === cardId; });
-              if (!card) return;
-              card.sections.push({ id: uid(), title: title, items: [] });
-              save(); render();
-            }
-
-            // ADD CARD
-            function showNewCardForm() {
-              document.getElementById('newCardForm').classList.add('show');
-              setTimeout(function() { document.getElementById('newCardTitle').focus(); }, 50);
-            }
+            function showNewCardForm() { document.getElementById('newCardForm').classList.add('show'); setTimeout(function(){ document.getElementById('newCardTitle').focus(); },50); }
             function hideNewCardForm() { document.getElementById('newCardForm').classList.remove('show'); }
             function submitNewCard() {
-              var title = document.getElementById('newCardTitle').value.trim();
-              var sec = document.getElementById('newCardSection').value.trim() || 'General';
-              if (!title) return;
-              data.cards.push({ id: uid(), title: title, hideValues: false, sections: [{ id: uid(), title: sec, items: [] }] });
+              var t = document.getElementById('newCardTitle').value.trim(), s = document.getElementById('newCardSection').value.trim()||'General';
+              if (!t) return;
+              var page = activePage(); if (!page) return;
+              page.cards.push({id:uid(),title:t,hideValues:false,sections:[{id:uid(),title:s,items:[]}]});
               save(); render();
             }
-
-            // RENAME
-            function showRenameForm(cardId) {
-              hideContextMenu();
-              document.getElementById('renameForm_' + cardId).classList.add('show');
-              setTimeout(function() { var inp = document.getElementById('renameInput_' + cardId); inp.focus(); inp.select(); }, 50);
-            }
-            function hideRenameForm(cardId) { document.getElementById('renameForm_' + cardId).classList.remove('show'); }
-            function submitRename(cardId) {
-              var title = document.getElementById('renameInput_' + cardId).value.trim();
-              if (!title) return;
-              var card = data.cards.find(function(c) { return c.id === cardId; });
-              if (card) card.title = title;
+            function showRenameForm(cid) { hideContextMenu(); document.getElementById('renameForm_'+cid).classList.add('show'); setTimeout(function(){ var i=document.getElementById('renameInput_'+cid); i.focus(); i.select(); },50); }
+            function hideRenameForm(cid) { document.getElementById('renameForm_'+cid).classList.remove('show'); }
+            function submitRename(cid) {
+              var t = document.getElementById('renameInput_'+cid).value.trim(); if (!t) return;
+              var c = activePage().cards.find(function(x){return x.id===cid;}); if (c) c.title=t;
               save(); render();
             }
-
-            // DELETE CARD
-            function deleteCard(cardId) {
+            function deleteCard(cid) {
               hideContextMenu();
-              var card = data.cards.find(function(c) { return c.id === cardId; });
-              if (!card) return;
-              showConfirm(
-                'Delete "' + esc(card.title) + '"?',
-                'This will permanently delete this card and all its entries.',
-                function() {
-                  data.cards = data.cards.filter(function(c) { return c.id !== cardId; });
-                  save(); render();
+              var page = activePage(); if (!page) return;
+              var c = page.cards.find(function(x){return x.id===cid;}); if (!c) return;
+              showConfirm('Delete "'+esc(c.title)+'"?','This will permanently delete this card and all its entries.',function(){
+                page.cards=page.cards.filter(function(x){return x.id!==cid;}); save(); render();
+              });
+            }
+
+            // ===== PAGE MANAGEMENT =====
+            function switchPage(pageId) { activePageId = pageId; exitSelectMode(); }
+            function addPage() {
+              var name = 'Page ' + (data.pages.length + 1);
+              var newPage = { id: uid(), name: name, cards: [] };
+              data.pages.push(newPage);
+              activePageId = newPage.id;
+              save(); render();
+              // Auto-trigger rename so user can name it
+              setTimeout(function() {
+                var tabs = document.querySelectorAll('.tab.active');
+                if (tabs.length) startRenameTabEl(tabs[0], newPage.id);
+              }, 50);
+            }
+            function startRenameTab(e, pageId) {
+              e.stopPropagation();
+              startRenameTabEl(e.target, pageId);
+            }
+            function startRenameTabById(pageId) {
+              var tabs = document.querySelectorAll('.tab');
+              for (var i = 0; i < tabs.length; i++) {
+                if (tabs[i].textContent.trim() === (data.pages.find(function(p){return p.id===pageId;}) || {}).name) {
+                  startRenameTabEl(tabs[i], pageId);
+                  return;
                 }
-              );
+              }
             }
-
-            // TOGGLE HIDE VALUES
-            function toggleHideValues(cardId) {
-              var card = data.cards.find(function(c) { return c.id === cardId; });
-              if (!card) return;
-              card.hideValues = !card.hideValues;
+            function startRenameTabEl(tabEl, pageId) {
+              var page = data.pages.find(function(p){ return p.id === pageId; });
+              if (!page) return;
+              var input = document.createElement('input');
+              input.className = 'tab-rename-input';
+              input.value = page.name;
+              input.onblur = function() { finishRenameTab(input, pageId); };
+              input.onkeydown = function(ev) {
+                if (ev.key === 'Enter') input.blur();
+                if (ev.key === 'Escape') { input.value = page.name; input.blur(); }
+              };
+              tabEl.replaceWith(input);
+              input.focus();
+              input.select();
+            }
+            function finishRenameTab(input, pageId) {
+              var page = data.pages.find(function(p){ return p.id === pageId; });
+              var val = input.value.trim();
+              if (val && page) { page.name = val; save(); }
+              render();
+            }
+            function deletePage(pageId) {
+              if (data.pages.length <= 1) { showToast('Cannot delete the last page'); return; }
+              var page = data.pages.find(function(p){ return p.id === pageId; });
+              showConfirm('Delete page "'+esc(page.name)+'"?','This will delete all cards in this page.',function(){
+                data.pages = data.pages.filter(function(p){ return p.id !== pageId; });
+                if (activePageId === pageId) activePageId = data.pages[0].id;
+                save(); render();
+              });
+            }
+            function toggleHideValues(cid) {
+              var c = activePage().cards.find(function(x){return x.id===cid;}); if (c) c.hideValues=!c.hideValues;
               save(); render(); hideContextMenu();
             }
 
-            // CONTEXT MENU
-            function showCardMenu(e, cardId) {
+            // ===== CONTEXT MENU =====
+            function showCardMenu(e, cid) {
               e.stopPropagation();
-              var card = data.cards.find(function(c) { return c.id === cardId; });
-              var menu = document.getElementById('contextMenu');
-              var hideOn = card && card.hideValues;
-              menu.innerHTML =
-                '<div class="context-menu-item" onclick="toggleHideValues(\\'' + cardId + '\\')">' +
-                  'Hide Values <div class="context-menu-toggle' + (hideOn ? ' on' : '') + '"></div></div>' +
+              var c = activePage().cards.find(function(x){return x.id===cid;});
+              var m = document.getElementById('contextMenu');
+              m.innerHTML =
+                '<div class="context-menu-item" onclick="toggleHideValues(\''+cid+'\')">Hide Values <div class="context-menu-toggle'+(c&&c.hideValues?' on':'')+'"></div></div>' +
                 '<div class="context-menu-sep"></div>' +
-                '<div class="context-menu-item" onclick="showNewSectionForm(\\'' + cardId + '\\')">Add Section</div>' +
-                '<div class="context-menu-item" onclick="showRenameForm(\\'' + cardId + '\\')">Rename Card</div>' +
-                '<div class="context-menu-item" onclick="enterSelectMode(\\'' + cardId + '\\')">Select &amp; Delete Items</div>' +
+                '<div class="context-menu-item" onclick="showNewSectionForm(\''+cid+'\')">Add Section</div>' +
+                '<div class="context-menu-item" onclick="showRenameForm(\''+cid+'\')">Rename Card</div>' +
+                '<div class="context-menu-item" onclick="enterSelectMode(\''+cid+'\')">Select &amp; Delete Items</div>' +
                 '<div class="context-menu-sep"></div>' +
-                '<div class="context-menu-item danger" onclick="deleteCard(\\'' + cardId + '\\')">Delete Card</div>';
-              var rect = e.target.getBoundingClientRect();
-              menu.style.left = Math.min(rect.left, window.innerWidth - 190) + 'px';
-              menu.style.top = (rect.bottom + 4) + 'px';
-              menu.classList.add('show');
+                '<div class="context-menu-item danger" onclick="deleteCard(\''+cid+'\')">Delete Card</div>';
+              var r = e.target.getBoundingClientRect();
+              m.style.left = Math.min(r.left, window.innerWidth-190)+'px';
+              m.style.top = (r.bottom+4)+'px';
+              m.classList.add('show');
+            }
+            function showTabContextMenu(e, pageId) {
+              e.preventDefault(); e.stopPropagation();
+              var page = data.pages.find(function(p){ return p.id === pageId; });
+              if (!page) return;
+              var m = document.getElementById('contextMenu');
+              var html = '<div class="context-menu-item" onclick="startRenameTabById(\''+pageId+'\');hideContextMenu()">Rename</div>';
+              if (data.pages.length > 1) {
+                html += '<div class="context-menu-sep"></div>';
+                html += '<div class="context-menu-item danger" onclick="deletePage(\''+pageId+'\');hideContextMenu()">Delete</div>';
+              }
+              m.innerHTML = html;
+              var r = e.target.getBoundingClientRect();
+              m.style.left = Math.min(r.left, window.innerWidth-150)+'px';
+              m.style.top = (r.bottom+4)+'px';
+              m.classList.add('show');
             }
             function hideContextMenu() { document.getElementById('contextMenu').classList.remove('show'); }
 
-            document.addEventListener('click', function(e) {
-              if (!e.target.closest('.context-menu') && !e.target.closest('.card-menu-btn')) hideContextMenu();
-            });
+            document.addEventListener('click', function(e) { if (!e.target.closest('.context-menu') && !e.target.closest('.card-menu-btn')) hideContextMenu(); });
             document.addEventListener('keydown', function(e) {
-              if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
-                var form = e.target.closest('.inline-form, .card-form');
-                if (form) { var btn = form.querySelector('.btn-primary'); if (btn) btn.click(); }
-              }
-              if (e.key === 'Escape') {
-                if (selectMode) { exitSelectMode(); return; }
-                hideConfirm();
-              }
+              if (e.key==='Enter' && e.target.tagName==='INPUT') { var f=e.target.closest('.inline-form,.card-form'); if(f){var b=f.querySelector('.btn-primary');if(b)b.click();} }
+              if (e.key==='Escape') { if(selectMode){exitSelectMode();return;} hideConfirm(); }
             });
 
+            if (data.pages.length) activePageId = data.pages[0].id;
             render();
-            setTimeout(function() { save(); }, 500);
+            setTimeout(function(){ save(); }, 500);
           </script>
         </body>
         </html>
-        """
+        """##
 }
