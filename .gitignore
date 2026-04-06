@@ -1,0 +1,23 @@
+# Build artifacts
+.build/
+GlanceBar.app/
+*.o
+*.d
+*.swp
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# macOS
+.DS_Store
+._*
+
+# User data (contains sensitive info)
+data.json
+
+# IDE
+.vscode/
+.idea/
