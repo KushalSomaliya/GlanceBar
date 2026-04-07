@@ -193,7 +193,17 @@ class PanelController {
 
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == 53 {
-                self?.slideOut()
+                // Let the WebView handle Escape first if an input is focused
+                let js = "document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')"
+                self?.webViewController.webView.evaluateJavaScript(js) { result, _ in
+                    if let hasFocus = result as? Bool, hasFocus {
+                        // Input is focused — set cancel flag then blur
+                        self?.webViewController.webView.evaluateJavaScript("window._escCancel=true;cancelEdit();") { _, _ in }
+                    } else {
+                        // Nothing focused — dismiss the panel
+                        self?.slideOut()
+                    }
+                }
                 return nil
             }
             return event

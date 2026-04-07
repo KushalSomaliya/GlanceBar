@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 class PreferencesManager {
     private let defaults = UserDefaults.standard
@@ -12,6 +12,8 @@ class PreferencesManager {
         static let desktopPanelX = "desktopPanelX"
         static let desktopPanelY = "desktopPanelY"
         static let theme = "theme"
+        static let shortcutKey = "shortcutKey"
+        static let shortcutModifiers = "shortcutModifiers"
     }
 
     var hotCorner: ScreenCorner {
@@ -66,5 +68,31 @@ class PreferencesManager {
     var theme: String {
         get { defaults.string(forKey: Keys.theme) ?? "auto" }
         set { defaults.set(newValue, forKey: Keys.theme) }
+    }
+
+    var shortcutKey: String {
+        get { defaults.object(forKey: Keys.shortcutKey) == nil ? "]" : defaults.string(forKey: Keys.shortcutKey) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.shortcutKey) }
+    }
+
+    var shortcutModifiers: NSEvent.ModifierFlags {
+        get {
+            if defaults.object(forKey: Keys.shortcutModifiers) == nil { return .command }
+            let raw = defaults.integer(forKey: Keys.shortcutModifiers)
+            return NSEvent.ModifierFlags(rawValue: UInt(raw))
+        }
+        set { defaults.set(Int(newValue.rawValue), forKey: Keys.shortcutModifiers) }
+    }
+
+    var shortcutDisplayString: String {
+        if shortcutKey.isEmpty { return "None" }
+        var parts: [String] = []
+        let mods: NSEvent.ModifierFlags = shortcutModifiers
+        if mods.contains(NSEvent.ModifierFlags.control) { parts.append("\u{2303}") }
+        if mods.contains(NSEvent.ModifierFlags.option) { parts.append("\u{2325}") }
+        if mods.contains(NSEvent.ModifierFlags.shift) { parts.append("\u{21E7}") }
+        if mods.contains(NSEvent.ModifierFlags.command) { parts.append("\u{2318}") }
+        parts.append(shortcutKey.uppercased())
+        return parts.joined()
     }
 }

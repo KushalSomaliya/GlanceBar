@@ -192,6 +192,7 @@ enum DefaultWidget {
 
           .section { margin-bottom: 8px; animation: fadeSlideIn 0.2s ease; }
           .section:last-child { margin-bottom: 0; }
+          .section-nested { margin-left: 12px; padding-left: 8px; border-left: 1px solid var(--sep); }
           .section-header {
             display: flex; align-items: center;
             padding-bottom: 4px;
@@ -199,21 +200,34 @@ enum DefaultWidget {
             margin-bottom: 3px;
           }
           .section-title { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); flex: 1; }
+          .section-add-group {
+            display: flex; align-items: center;
+            opacity: 0; transition: opacity 0.08s;
+            position: relative;
+          }
+          .section-header:hover .section-add-group { opacity: 1; }
           .section-add-btn {
             width: 18px; height: 18px; border: none; background: none;
             color: var(--text-dim); font-size: 15px; cursor: pointer;
-            border-radius: 4px; line-height: 1;
+            border-radius: 4px 0 0 4px; line-height: 1;
             display: flex; align-items: center; justify-content: center;
-            transition: all 0.15s; opacity: 0;
+            transition: all 0.15s;
           }
-          .section:hover .section-add-btn { opacity: 1; }
           .section-add-btn:hover { background: var(--hover-bg); color: var(--text-muted); }
+          .section-dropdown-btn {
+            width: 18px; height: 18px; border: none; background: none;
+            color: var(--text-dim); font-size: 15px; cursor: pointer;
+            border-radius: 0 4px 4px 0; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+          }
+          .section-dropdown-btn:hover { background: var(--hover-bg); color: var(--text-muted); }
 
           .row {
             position: relative;
             display: flex; align-items: center;
             padding: 5px 8px; border-radius: 6px;
-            cursor: pointer; transition: background 0.15s;
+            cursor: pointer; transition: background 0.08s;
             animation: fadeSlideIn 0.2s ease;
             border: 2px solid transparent;
           }
@@ -224,7 +238,7 @@ enum DefaultWidget {
           .drag-handle {
             width: 14px; margin-right: 4px;
             color: var(--handle-color); font-size: 10px;
-            cursor: grab; opacity: 0; transition: opacity 0.15s;
+            cursor: grab; opacity: 0; transition: opacity 0.08s;
             display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
           }
@@ -237,10 +251,60 @@ enum DefaultWidget {
           .label { color: var(--text-muted); font-size: 12px; flex: 1; }
           .value {
             font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
-            color: var(--text-muted); transition: all 0.25s ease;
+            color: var(--text-muted); transition: color 0.08s;
+            max-width: 55%; text-align: right;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           }
           .row:hover .value { color: var(--text-title); }
           .value.copied { color: var(--success) !important; font-family: -apple-system, sans-serif; font-weight: 500; }
+
+          /* Full value tooltip on hover for truncated values */
+          .row { position: relative; }
+          .row-editing {
+            background: var(--hover-bg); border-radius: 6px;
+            padding: 5px 8px; display: flex; gap: 6px;
+            align-items: flex-start; animation: fadeSlideIn 0.15s ease;
+          }
+          .row-editing input, .row-editing textarea {
+            flex: 1; min-width: 40px; background: var(--input-bg);
+            border: 1px solid var(--input-border); border-radius: 5px;
+            padding: 4px 8px; font-size: 12px; color: var(--text);
+            outline: none; font-family: inherit;
+            -webkit-user-select: text; user-select: text;
+          }
+          .row-editing textarea {
+            resize: vertical; min-height: 28px; max-height: 100px;
+            font-family: 'SF Mono', Menlo, monospace; font-size: 11px; line-height: 1.4;
+          }
+          .row-editing input:focus, .row-editing textarea:focus { border-color: var(--accent); }
+          .section-title-editing {
+            display: flex; gap: 6px; align-items: center;
+            padding-bottom: 4px; margin-bottom: 3px;
+            border-bottom: 1px solid var(--sep);
+            animation: fadeSlideIn 0.15s ease;
+          }
+          .section-title-editing input {
+            flex: 1; background: var(--input-bg);
+            border: 1px solid var(--input-border); border-radius: 5px;
+            padding: 3px 8px; font-size: 9px; font-weight: 600;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--text); outline: none; font-family: inherit;
+            -webkit-user-select: text; user-select: text;
+          }
+          .section-title-editing input:focus { border-color: var(--accent); }
+          .value-tooltip {
+            display: none; position: absolute;
+            right: 8px; top: calc(100% + 4px);
+            background: var(--menu-bg); border: 1px solid var(--menu-border);
+            border-radius: 8px; padding: 6px 10px;
+            font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
+            color: var(--text); white-space: pre-wrap; word-break: break-all;
+            max-width: 300px; z-index: 50;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+            pointer-events: none;
+            animation: fadeIn 0.15s ease;
+          }
+          .row:hover .value-tooltip { display: block; }
 
           .value-dots { font-size: 11px; color: var(--dots-color); letter-spacing: 2px; }
           .value-real { display: none; }
@@ -285,13 +349,16 @@ enum DefaultWidget {
 
           .inline-form { display: none; padding: 6px 8px; background: var(--hover-bg); border-radius: 6px; margin-top: 4px; }
           .inline-form.show { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; animation: fadeSlideIn 0.2s ease; }
-          .inline-form input, .card-form input {
+          .inline-form input, .inline-form textarea, .card-form input {
             flex: 1; min-width: 60px; background: var(--input-bg); border: 1px solid var(--input-border);
             border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--text);
             outline: none; font-family: inherit; -webkit-user-select: text; user-select: text;
           }
-          .inline-form input:focus, .card-form input:focus { border-color: var(--accent); background: var(--input-focus-bg); }
-          .inline-form input::placeholder, .card-form input::placeholder { color: var(--text-dim); }
+          .inline-form textarea {
+            resize: vertical; min-height: 32px; max-height: 120px; line-height: 1.4;
+          }
+          .inline-form input:focus, .inline-form textarea:focus, .card-form input:focus { border-color: var(--accent); background: var(--input-focus-bg); }
+          .inline-form input::placeholder, .inline-form textarea::placeholder, .card-form input::placeholder { color: var(--text-dim); }
 
           .add-card-btn {
             width: 100%; padding: 12px;
@@ -414,6 +481,7 @@ enum DefaultWidget {
             var data = JSON.parse(JSON.stringify(DEFAULT_DATA));
             var activePageId = null;
             var selectMode = false, selectCardId = null, selected = {};
+            var editingItemId = null, editingSectionId = null;
 
             // Drag state
             var dragType = null, dragCardId = null, dragSectionId = null, dragItemId = null;
@@ -421,6 +489,22 @@ enum DefaultWidget {
             function uid() { return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
             function save() { if (window.GlanceBar) GlanceBar.saveData(data); }
             function activePage() { return data.pages.find(function(p){ return p.id === activePageId; }) || data.pages[0]; }
+
+            // Recursive section finder
+            function findSection(sections, sectionId) {
+              for (var i = 0; i < sections.length; i++) {
+                if (sections[i].id === sectionId) return sections[i];
+                if (sections[i].sections) {
+                  var found = findSection(sections[i].sections, sectionId);
+                  if (found) return found;
+                }
+              }
+              return null;
+            }
+            function findSectionInCard(cardId, sectionId) {
+              var c = activePage().cards.find(function(x){return x.id===cardId;});
+              return c ? findSection(c.sections, sectionId) : null;
+            }
 
             window._onDataLoaded = function(saved) {
               if (!saved) return;
@@ -446,11 +530,10 @@ enum DefaultWidget {
               if (page) {
                 html += page.cards.map(function(card) { return renderCard(card); }).join('');
               }
-              html += '<div class="card-form" id="newCardForm"><div class="card-form-title">New Card</div>' +
+              html += '<div class="card-form" id="newCardForm" data-form-type="card">' +
                 '<div class="form-row"><input id="newCardTitle" placeholder="Card name (e.g. Passwords)"></div>' +
                 '<div class="form-row"><input id="newCardSection" placeholder="First section name (e.g. Email)"></div>' +
-                '<div class="form-actions"><button class="btn btn-secondary" onclick="hideNewCardForm()">Cancel</button>' +
-                '<button class="btn btn-primary" onclick="submitNewCard()">Create</button></div></div>';
+                '</div>';
               html += '<button class="add-card-btn" onclick="showNewCardForm()">+ Add Card</button>';
               html += '<div class="footer-links">' +
                 '<button class="footer-link" onclick="GlanceBar.exportData()">Export</button>' +
@@ -485,40 +568,63 @@ enum DefaultWidget {
                 '<div class="card-header"><div class="card-title">' + esc(card.title) + '</div>' +
                 '<button class="card-menu-btn" onclick="showCardMenu(event,\'' + card.id + '\')">\u2026</button></div>' +
                 card.sections.map(function(s) { return renderSection(card.id, s, card.hideValues, isSel); }).join('') +
-                '<div class="card-form" id="newSectionForm_' + card.id + '"><div class="card-form-title">New Section</div>' +
-                '<div class="form-row"><input id="newSectionTitle_' + card.id + '" placeholder="Section name"></div>' +
-                '<div class="form-actions"><button class="btn btn-secondary" onclick="hideNewSectionForm(\'' + card.id + '\')">Cancel</button>' +
-                '<button class="btn btn-primary" onclick="submitNewSection(\'' + card.id + '\')">Add</button></div></div>' +
-                '<div class="card-form" id="renameForm_' + card.id + '"><div class="card-form-title">Rename Card</div>' +
-                '<div class="form-row"><input id="renameInput_' + card.id + '" placeholder="New name" value="' + esc(card.title) + '"></div>' +
-                '<div class="form-actions"><button class="btn btn-secondary" onclick="hideRenameForm(\'' + card.id + '\')">Cancel</button>' +
-                '<button class="btn btn-primary" onclick="submitRename(\'' + card.id + '\')">Save</button></div></div></div>';
+                '<div class="card-form" id="newSectionForm_' + card.id + '" data-form-card="' + card.id + '" data-form-type="section">' +
+                '<div class="form-row"><input id="newSectionTitle_' + card.id + '" placeholder="New section name"></div></div>' +
+                '<div class="card-form" id="renameForm_' + card.id + '" data-form-card="' + card.id + '" data-form-type="rename">' +
+                '<div class="form-row"><input id="renameInput_' + card.id + '" placeholder="New name" value="' + esc(card.title) + '"></div></div></div>';
             }
 
-            function renderSection(cardId, section, hideValues, isSel) {
+            function renderSection(cardId, section, hideValues, isSel, depth) {
+              depth = depth || 0;
               var sc = isSel && selected['sec_' + section.id];
-              return '<div class="section" data-section="' + section.id + '">' +
-                '<div class="section-header">' +
-                (isSel ? '<div class="section-select-checkbox' + (sc?' checked':'') + '" onclick="toggleSelectSection(\'' + section.id + '\')">' + (sc?'\u2713':'') + '</div>' : '') +
-                '<div class="section-title">' + esc(section.title) + '</div>' +
-                (isSel ? '' : '<button class="section-add-btn" onclick="showAddEntryForm(\'' + cardId + '\',\'' + section.id + '\')">+</button>') +
-                '</div>' +
+              var nestedClass = depth > 0 ? ' section-nested' : '';
+              var childSections = section.sections || [];
+              return '<div class="section' + nestedClass + '" data-section="' + section.id + '">' +
+                (editingSectionId === section.id ?
+                  '<div class="section-title-editing" data-edit-card="' + cardId + '" data-edit-sid="' + section.id + '">' +
+                    '<input id="edit_section_' + section.id + '" value="' + esc(section.title) + '">' +
+                  '</div>'
+                :
+                  '<div class="section-header" oncontextmenu="showSectionHeaderMenu(event,\'' + cardId + '\',\'' + section.id + '\')">' +
+                  (isSel ? '<div class="section-select-checkbox' + (sc?' checked':'') + '" onclick="toggleSelectSection(\'' + section.id + '\')">' + (sc?'\u2713':'') + '</div>' : '') +
+                  '<div class="section-title">' + esc(section.title) + '</div>' +
+                  (isSel ? '' :
+                    '<div class="section-add-group">' +
+                      '<button class="section-add-btn" onclick="showAddEntryForm(\'' + cardId + '\',\'' + section.id + '\')">+</button>' +
+                      '<button class="section-dropdown-btn" onclick="showSectionDropdown(event,\'' + cardId + '\',\'' + section.id + '\')">\u25BE</button>' +
+                    '</div>') +
+                  '</div>') +
                 section.items.map(function(item, idx) { return renderRow(cardId, section.id, item, hideValues, isSel, idx); }).join('') +
-                '<div class="inline-form" id="entryForm_' + section.id + '">' +
+                '<div class="inline-form" id="entryForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="entry">' +
                 '<input id="inp_label_' + section.id + '" placeholder="Label">' +
-                '<input id="inp_value_' + section.id + '" placeholder="Value">' +
-                '<button class="btn btn-primary" onclick="submitEntry(\'' + cardId + '\',\'' + section.id + '\')">Add</button>' +
-                '<button class="btn btn-secondary" onclick="hideAddEntryForm(\'' + section.id + '\')">Cancel</button></div></div>';
+                '<textarea id="inp_value_' + section.id + '" placeholder="Value" rows="1"></textarea>' +
+                '</div>' +
+                childSections.map(function(cs) { return renderSection(cardId, cs, hideValues, isSel, depth + 1); }).join('') +
+                '<div class="card-form" id="newSubsectionForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="subsection">' +
+                '<div class="form-row"><input id="newSubsectionTitle_' + section.id + '" placeholder="New subsection name"></div></div>' +
+                '</div>';
             }
 
             function renderRow(cardId, sectionId, item, hideValues, isSel, idx) {
-              var sv = item.value.replace(/'/g, "\\'");
               var chk = isSel && selected[item.id];
+              var firstLine = item.value.split('\n')[0];
+              var isLong = item.value.length > 30 || item.value.includes('\n');
+              var tooltipHtml = isLong && !hideValues ? '<div class="value-tooltip">' + esc(item.value) + '</div>' : '';
+
+              // Inline editing mode
+              if (editingItemId === item.id) {
+                var escapedVal = esc(item.value);
+                return '<div class="row-editing" data-edit-card="' + cardId + '" data-edit-section="' + sectionId + '" data-edit-item="' + item.id + '">' +
+                  '<input id="edit_label_' + item.id + '" value="' + esc(item.label) + '">' +
+                  '<textarea id="edit_value_' + item.id + '" rows="' + Math.min(item.value.split('\n').length, 4) + '">' + escapedVal + '</textarea>' +
+                  '</div>';
+              }
+
               var valHtml;
               if (hideValues) {
-                valHtml = '<span class="value-dots">\u2022\u2022\u2022\u2022\u2022\u2022</span><span class="value value-real">' + esc(item.value) + '</span>';
+                valHtml = '<span class="value-dots">\u2022\u2022\u2022\u2022\u2022\u2022</span><span class="value value-real">' + esc(firstLine) + '</span>';
               } else {
-                valHtml = '<span class="value">' + esc(item.value) + '</span>';
+                valHtml = '<span class="value">' + esc(firstLine) + '</span>' + tooltipHtml;
               }
               if (isSel) {
                 return '<div class="row" onclick="toggleSelectItem(\'' + item.id + '\')">' +
@@ -527,7 +633,8 @@ enum DefaultWidget {
               }
               return '<div class="row" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" data-idx="' + idx + '" ' +
                 'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
-                'onclick="copyValue(this,\'' + sv + '\',' + hideValues + ')">' +
+                'onclick="copyById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',' + hideValues + ')" ' +
+                'oncontextmenu="showEntryMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
                 '<span class="drag-handle">\u2630</span>' +
                 '<span class="label">' + esc(item.label) + '</span>' + valHtml + '</div>';
             }
@@ -563,7 +670,7 @@ enum DefaultWidget {
               var targetRow = e.currentTarget;
               if (targetRow.dataset.section !== dragSectionId) return;
               var card = activePage().cards.find(function(c){ return c.id === dragCardId; });
-              var section = card && card.sections.find(function(s){ return s.id === dragSectionId; });
+              var section = card && findSection(card.sections, dragSectionId);
               if (!section) return;
               var fromIdx = section.items.findIndex(function(i){ return i.id === dragItemId; });
               var toIdx = parseInt(targetRow.dataset.idx);
@@ -582,21 +689,133 @@ enum DefaultWidget {
             }
 
             // ===== COPY =====
+            function copyById(row, cardId, sectionId, itemId, isHidden) {
+              var sec = findSectionInCard(cardId, sectionId);
+              if (!sec) return;
+              var item = sec.items.find(function(i){ return i.id === itemId; });
+              if (!item) return;
+              copyValue(row, item.value, isHidden);
+            }
+            var scrambleChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*';
+            var matrixChars = '\u30A2\u30AB\u30B5\u30BF\u30CA\u30CF\u30DE\u30E4\u30E9\u30EF01234789';
+            var binaryChars = '01';
+            var blockChars = '\u2588\u2593\u2592\u2591\u2580\u2584';
+
+            // Effect 1: Decrypt — random chars revealed left to right
+            function fxDecrypt(el, finalText, duration, cb) {
+              var len = Math.max(finalText.length, 4);
+              var steps = 7; var step = 0;
+              var t = setInterval(function() {
+                step++;
+                if (step >= steps) { clearInterval(t); el.textContent = finalText; if(cb)cb(); return; }
+                var revealed = Math.floor((step / steps) * len); var r = '';
+                for (var i = 0; i < len; i++) r += i < revealed ? (finalText[i]||'') : scrambleChars[Math.floor(Math.random()*scrambleChars.length)];
+                el.textContent = r;
+              }, duration/steps);
+            }
+
+            // Effect 2: Matrix — katakana rain then resolve
+            function fxMatrix(el, finalText, duration, cb) {
+              var len = Math.max(finalText.length, 5);
+              var steps = 8; var step = 0;
+              var t = setInterval(function() {
+                step++;
+                if (step >= steps) { clearInterval(t); el.textContent = finalText; if(cb)cb(); return; }
+                var r = '';
+                for (var i = 0; i < len; i++) {
+                  if (step > steps * 0.6 && i < Math.floor((step/steps)*len)) r += finalText[i]||'';
+                  else r += matrixChars[Math.floor(Math.random()*matrixChars.length)];
+                }
+                el.textContent = r;
+              }, duration/steps);
+            }
+
+            // Effect 3: Binary — 0s and 1s then snap to final
+            function fxBinary(el, finalText, duration, cb) {
+              var len = Math.max(finalText.length, 6);
+              var steps = 6; var step = 0;
+              var t = setInterval(function() {
+                step++;
+                if (step >= steps) { clearInterval(t); el.textContent = finalText; if(cb)cb(); return; }
+                var r = '';
+                for (var i = 0; i < len; i++) r += binaryChars[Math.floor(Math.random()*2)];
+                el.textContent = r;
+              }, duration/steps);
+            }
+
+            // Effect 4: Typewriter — one char at a time from left
+            function fxTypewriter(el, finalText, duration, cb) {
+              var step = 0;
+              var t = setInterval(function() {
+                step++;
+                if (step > finalText.length) { clearInterval(t); if(cb)cb(); return; }
+                el.textContent = finalText.slice(0, step);
+              }, duration/finalText.length);
+            }
+
+            // Effect 5: Blocks — block characters dissolve into text
+            function fxBlocks(el, finalText, duration, cb) {
+              var len = Math.max(finalText.length, 4);
+              var steps = 7; var step = 0;
+              var t = setInterval(function() {
+                step++;
+                if (step >= steps) { clearInterval(t); el.textContent = finalText; if(cb)cb(); return; }
+                var r = '';
+                for (var i = 0; i < len; i++) {
+                  if (Math.random() < step/steps) r += finalText[i]||'';
+                  else r += blockChars[Math.floor(Math.random()*blockChars.length)];
+                }
+                el.textContent = r;
+              }, duration/steps);
+            }
+
+            // Effect 6: Shuffle — scramble the final text letters then sort into place
+            function fxShuffle(el, finalText, duration, cb) {
+              var chars = finalText.split('');
+              var steps = 7; var step = 0;
+              var t = setInterval(function() {
+                step++;
+                if (step >= steps) { clearInterval(t); el.textContent = finalText; if(cb)cb(); return; }
+                var arr = chars.slice();
+                var lockCount = Math.floor((step/steps)*arr.length);
+                for (var i = arr.length - 1; i >= lockCount; i--) {
+                  var j = lockCount + Math.floor(Math.random()*(i-lockCount+1));
+                  var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+                }
+                el.textContent = arr.join('');
+              }, duration/steps);
+            }
+
+            var copyEffects = [fxDecrypt, fxMatrix, fxBinary, fxTypewriter, fxBlocks, fxShuffle];
+            function randomEffect() { return copyEffects[Math.floor(Math.random()*copyEffects.length)]; }
+
+            var copyAnimating = {};
             function copyValue(row, text, isHidden) {
               if (selectMode) return;
+              var itemId = row.dataset.item || row.dataset.idx || '';
               if (window.GlanceBar) GlanceBar.copy(text);
               else navigator.clipboard.writeText(text).catch(function(){});
+              // Skip animation if already animating this row
+              if (copyAnimating[itemId]) return;
               var dotsEl = row.querySelector('.value-dots');
               var realEl = row.querySelector('.value-real');
               var plainEl = (!dotsEl) ? row.querySelector('.value') : null;
+              var targetEl = realEl || plainEl;
+              if (!targetEl) return;
+              // Store original from the data, not from DOM
+              var firstLine = text.split('\n')[0];
+              copyAnimating[itemId] = true;
               if (dotsEl) dotsEl.style.display = 'none';
-              if (realEl) { realEl.style.display = 'inline'; realEl.textContent = 'Copied'; realEl.classList.add('copied'); }
-              if (plainEl) { var o = plainEl.textContent; plainEl.textContent = 'Copied'; plainEl.classList.add('copied');
-                setTimeout(function(){ plainEl.textContent = o; plainEl.classList.remove('copied'); }, 1200); return; }
-              setTimeout(function(){
-                if (dotsEl) dotsEl.style.display = '';
-                if (realEl) { realEl.style.display = ''; realEl.textContent = text; realEl.classList.remove('copied'); }
-              }, 1200);
+              if (realEl) realEl.style.display = 'inline';
+              targetEl.classList.add('copied');
+              randomEffect()(targetEl, 'Copied', 300, function() {
+                setTimeout(function(){
+                  targetEl.classList.remove('copied');
+                  if (dotsEl) { dotsEl.style.display = ''; realEl.style.display = ''; }
+                  targetEl.textContent = firstLine;
+                  delete copyAnimating[itemId];
+                }, 900);
+              });
             }
 
             // ===== SELECT MODE =====
@@ -606,26 +825,45 @@ enum DefaultWidget {
             function toggleSelectSection(sid) {
               var k = 'sec_' + sid;
               var card = activePage().cards.find(function(c){ return c.id === selectCardId; });
-              var sec = card && card.sections.find(function(s){ return s.id === sid; });
+              var sec = card && findSection(card.sections, sid);
               if (!sec) return;
-              if (selected[k]) { delete selected[k]; sec.items.forEach(function(i){ delete selected[i.id]; }); }
-              else { selected[k] = true; sec.items.forEach(function(i){ selected[i.id] = true; }); }
+            function selectAllInSection(s, val) {
+                s.items.forEach(function(i){ if(val) selected[i.id]=true; else delete selected[i.id]; });
+                if (s.sections) s.sections.forEach(function(cs){ if(val) selected['sec_'+cs.id]=true; else delete selected['sec_'+cs.id]; selectAllInSection(cs,val); });
+              }
+              if (selected[k]) { delete selected[k]; selectAllInSection(sec, false); }
+              else { selected[k] = true; selectAllInSection(sec, true); }
               render();
+            }
+            function collectSelectedLabels(sections, labels, sLabels) {
+              sections.forEach(function(s){
+                if (selected['sec_'+s.id]) { sLabels.push(s.title+' (entire section)'); }
+                else {
+                  s.items.forEach(function(i){ if (selected[i.id]) labels.push(i.label); });
+                  if (s.sections) collectSelectedLabels(s.sections, labels, sLabels);
+                }
+              });
+            }
+            function applyDeleteSelected(sections) {
+              sections.forEach(function(s){
+                if (selected['sec_'+s.id]) { s.items=[]; s._del=true; }
+                else {
+                  s.items = s.items.filter(function(i){return !selected[i.id];});
+                  if (s.sections) { applyDeleteSelected(s.sections); s.sections = s.sections.filter(function(cs){return !cs._del;}); }
+                }
+              });
             }
             function confirmDeleteSelected() {
               var card = activePage().cards.find(function(c){ return c.id === selectCardId; });
               if (!card) return;
               var labels = [], sLabels = [];
-              card.sections.forEach(function(s){
-                if (selected['sec_'+s.id]) sLabels.push(s.title+' (entire section)');
-                else s.items.forEach(function(i){ if (selected[i.id]) labels.push(i.label); });
-              });
+              collectSelectedLabels(card.sections, labels, sLabels);
               var all = sLabels.concat(labels);
               if (!all.length) return;
               showConfirm('Delete ' + all.length + ' item' + (all.length>1?'s':'') + '?',
                 all.map(function(l){ return '<span class="item-label">'+esc(l)+'</span>'; }).join(''),
                 function(){
-                  card.sections.forEach(function(s){ if (selected['sec_'+s.id]){s.items=[];s._del=true;} else s.items=s.items.filter(function(i){return !selected[i.id];}); });
+                  applyDeleteSelected(card.sections);
                   card.sections = card.sections.filter(function(s){return !s._del;});
                   save(); exitSelectMode();
                 });
@@ -643,23 +881,200 @@ enum DefaultWidget {
             function hideConfirm() { document.getElementById('confirmOverlay').classList.remove('show'); }
 
             // ===== FORMS =====
-            function showAddEntryForm(cid, sid) { document.getElementById('entryForm_'+sid).classList.add('show'); setTimeout(function(){ document.getElementById('inp_label_'+sid).focus(); },50); }
-            function hideAddEntryForm(sid) { document.getElementById('entryForm_'+sid).classList.remove('show'); }
+            function showAddEntryForm(cid, sid) {
+              var form = document.getElementById('entryForm_'+sid);
+              form.classList.add('show');
+              setTimeout(function(){
+                var labelEl = document.getElementById('inp_label_'+sid);
+                var valueEl = document.getElementById('inp_value_'+sid);
+                labelEl.focus();
+                installFormBlur([labelEl, valueEl], function(){ submitEntry(cid, sid); }, function(){ hideAddEntryForm(sid); });
+              },50);
+            }
+            function hideAddEntryForm(sid) {
+              var form = document.getElementById('entryForm_'+sid);
+              if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input,textarea'); inputs.forEach(function(i){i.value='';}); }
+            }
             function submitEntry(cid, sid) {
               var l = document.getElementById('inp_label_'+sid).value.trim(), v = document.getElementById('inp_value_'+sid).value.trim();
               if (!l||!v) return;
-              var c = activePage().cards.find(function(x){return x.id===cid;}), s = c&&c.sections.find(function(x){return x.id===sid;});
+              var s = findSectionInCard(cid, sid);
               if (s) { s.items.push({id:uid(),label:l,value:v}); save(); render(); }
             }
-            function showNewSectionForm(cid) { hideContextMenu(); document.getElementById('newSectionForm_'+cid).classList.add('show'); setTimeout(function(){ document.getElementById('newSectionTitle_'+cid).focus(); },50); }
-            function hideNewSectionForm(cid) { document.getElementById('newSectionForm_'+cid).classList.remove('show'); }
+            function showNewSectionForm(cid) {
+              hideContextMenu();
+              document.getElementById('newSectionForm_'+cid).classList.add('show');
+              setTimeout(function(){
+                var el = document.getElementById('newSectionTitle_'+cid);
+                el.focus();
+                installFormBlur([el], function(){ submitNewSection(cid); }, function(){ hideNewSectionForm(cid); });
+              },50);
+            }
+            function hideNewSectionForm(cid) {
+              var form = document.getElementById('newSectionForm_'+cid);
+              if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input'); inputs.forEach(function(i){i.value='';}); }
+            }
             function submitNewSection(cid) {
               var t = document.getElementById('newSectionTitle_'+cid).value.trim(); if (!t) return;
               var c = activePage().cards.find(function(x){return x.id===cid;});
-              if (c) { c.sections.push({id:uid(),title:t,items:[]}); save(); render(); }
+              if (c) { c.sections.push({id:uid(),title:t,items:[],sections:[]}); save(); render(); }
             }
-            function showNewCardForm() { document.getElementById('newCardForm').classList.add('show'); setTimeout(function(){ document.getElementById('newCardTitle').focus(); },50); }
-            function hideNewCardForm() { document.getElementById('newCardForm').classList.remove('show'); }
+
+            // SUBSECTIONS
+            function showSubsectionForm(cid, sid) {
+              hideContextMenu();
+              document.getElementById('newSubsectionForm_'+sid).classList.add('show');
+              setTimeout(function(){
+                var el = document.getElementById('newSubsectionTitle_'+sid);
+                el.focus();
+                installFormBlur([el], function(){ submitSubsection(cid, sid); }, function(){ hideSubsectionForm(sid); });
+              },50);
+            }
+            function hideSubsectionForm(sid) {
+              var form = document.getElementById('newSubsectionForm_'+sid);
+              if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input'); inputs.forEach(function(i){i.value='';}); }
+            }
+            function submitSubsection(cid, sid) {
+              var t = document.getElementById('newSubsectionTitle_'+sid).value.trim(); if (!t) return;
+              var s = findSectionInCard(cid, sid);
+              if (s) { if (!s.sections) s.sections = []; s.sections.push({id:uid(),title:t,items:[],sections:[]}); save(); render(); }
+            }
+
+            // INLINE EDIT
+            var editBlurTimeout = null;
+
+            function startEditItem(cid, sid, iid) {
+              hideContextMenu();
+              editingItemId = iid; editingSectionId = null;
+              render();
+              setTimeout(function(){
+                var labelEl = document.getElementById('edit_label_'+iid);
+                var valueEl = document.getElementById('edit_value_'+iid);
+                if(labelEl) labelEl.focus();
+                installEditBlur([labelEl, valueEl], function(){ trySaveEditItem(cid,sid,iid); });
+              }, 50);
+            }
+            function trySaveEditItem(cid, sid, iid) {
+              var labelEl = document.getElementById('edit_label_'+iid);
+              var valueEl = document.getElementById('edit_value_'+iid);
+              if (!labelEl || !valueEl) return;
+              var l = labelEl.value.trim(), v = valueEl.value.trim();
+              if (l && v) {
+                var sec = findSectionInCard(cid, sid);
+                if (sec) { var item = sec.items.find(function(i){return i.id===iid;}); if(item){item.label=l;item.value=v;} }
+                save();
+              }
+              editingItemId = null; render();
+            }
+            function startEditSection(cid, sid) {
+              hideContextMenu();
+              editingSectionId = sid; editingItemId = null;
+              render();
+              setTimeout(function(){
+                var el = document.getElementById('edit_section_'+sid);
+                if(el){ el.focus(); el.select(); }
+                installEditBlur([el], function(){ trySaveEditSection(cid,sid); });
+              }, 50);
+            }
+            function trySaveEditSection(cid, sid) {
+              var el = document.getElementById('edit_section_'+sid);
+              if (!el) return;
+              var t = el.value.trim();
+              if (t) { var sec = findSectionInCard(cid,sid); if(sec) sec.title=t; save(); }
+              editingSectionId = null; render();
+            }
+            function cancelEdit() { window._escCancel = true; editingItemId = null; editingSectionId = null; render(); }
+
+            var formBlurTimeout = null;
+            function installFormBlur(elements, saveFn, cancelFn) {
+              elements.forEach(function(el){
+                if (!el) return;
+                el.addEventListener('blur', function(){
+                  formBlurTimeout = setTimeout(function(){
+                    if (window._escCancel) { window._escCancel = false; cancelFn(); return; }
+                    // Check if any of the elements have content
+                    var hasContent = elements.some(function(e){ return e && e.value.trim(); });
+                    if (hasContent) saveFn();
+                    else cancelFn();
+                  }, 100);
+                });
+                el.addEventListener('focus', function(){
+                  if (formBlurTimeout) { clearTimeout(formBlurTimeout); formBlurTimeout = null; }
+                });
+              });
+            }
+
+            function installEditBlur(elements, saveFn) {
+              elements.forEach(function(el){
+                if (!el) return;
+                el.addEventListener('blur', function(){
+                  editBlurTimeout = setTimeout(function(){
+                    if (window._escCancel) { window._escCancel = false; return; }
+                    if (editingItemId || editingSectionId) saveFn();
+                  }, 100);
+                });
+                el.addEventListener('focus', function(){
+                  if (editBlurTimeout) { clearTimeout(editBlurTimeout); editBlurTimeout = null; }
+                });
+              });
+            }
+
+            // ENTRY CONTEXT MENU (right-click on a row)
+            function showEntryMenu(e, cid, sid, iid) {
+              e.preventDefault(); e.stopPropagation();
+              var m = document.getElementById('contextMenu');
+              m.innerHTML =
+                '<div class="context-menu-item" onclick="startEditItem(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Edit</div>' +
+                '<div class="context-menu-sep"></div>' +
+                '<div class="context-menu-item danger" onclick="deleteOneEntry(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Delete</div>';
+              m.style.left = Math.min(e.clientX, window.innerWidth-150)+'px';
+              m.style.top = (e.clientY+4)+'px';
+              m.classList.add('show');
+            }
+            function deleteOneEntry(cid, sid, iid) {
+              hideContextMenu();
+              var sec = findSectionInCard(cid, sid);
+              if (sec) { sec.items = sec.items.filter(function(i){ return i.id !== iid; }); save(); render(); }
+            }
+
+            // SECTION HEADER CONTEXT MENU (right-click on section title)
+            function showSectionHeaderMenu(e, cid, sid) {
+              e.preventDefault(); e.stopPropagation();
+              var m = document.getElementById('contextMenu');
+              m.innerHTML =
+                '<div class="context-menu-item" onclick="startEditSection(\''+cid+'\',\''+sid+'\')">Rename Section</div>' +
+                '<div class="context-menu-item" onclick="showAddEntryForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Entry</div>' +
+                '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>';
+              m.style.left = Math.min(e.clientX, window.innerWidth-170)+'px';
+              m.style.top = (e.clientY+4)+'px';
+              m.classList.add('show');
+            }
+
+            // SECTION DROPDOWN (from the small arrow next to +)
+            function showSectionDropdown(e, cid, sid) {
+              e.stopPropagation();
+              var m = document.getElementById('contextMenu');
+              m.innerHTML =
+                '<div class="context-menu-item" onclick="showAddEntryForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Entry</div>' +
+                '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>';
+              var r = e.target.getBoundingClientRect();
+              m.style.left = Math.min(r.right - 150, window.innerWidth-160)+'px';
+              m.style.top = (r.bottom+4)+'px';
+              m.classList.add('show');
+            }
+            function showNewCardForm() {
+              document.getElementById('newCardForm').classList.add('show');
+              setTimeout(function(){
+                var t = document.getElementById('newCardTitle');
+                var s = document.getElementById('newCardSection');
+                t.focus();
+                installFormBlur([t, s], function(){ submitNewCard(); }, function(){ hideNewCardForm(); });
+              },50);
+            }
+            function hideNewCardForm() {
+              var form = document.getElementById('newCardForm');
+              if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input'); inputs.forEach(function(i){i.value='';}); }
+            }
             function submitNewCard() {
               var t = document.getElementById('newCardTitle').value.trim(), s = document.getElementById('newCardSection').value.trim()||'General';
               if (!t) return;
@@ -667,8 +1082,19 @@ enum DefaultWidget {
               page.cards.push({id:uid(),title:t,hideValues:false,sections:[{id:uid(),title:s,items:[]}]});
               save(); render();
             }
-            function showRenameForm(cid) { hideContextMenu(); document.getElementById('renameForm_'+cid).classList.add('show'); setTimeout(function(){ var i=document.getElementById('renameInput_'+cid); i.focus(); i.select(); },50); }
-            function hideRenameForm(cid) { document.getElementById('renameForm_'+cid).classList.remove('show'); }
+            function showRenameForm(cid) {
+              hideContextMenu();
+              document.getElementById('renameForm_'+cid).classList.add('show');
+              setTimeout(function(){
+                var inp = document.getElementById('renameInput_'+cid);
+                inp.focus(); inp.select();
+                installFormBlur([inp], function(){ submitRename(cid); }, function(){ hideRenameForm(cid); });
+              },50);
+            }
+            function hideRenameForm(cid) {
+              var form = document.getElementById('renameForm_'+cid);
+              if (form) form.classList.remove('show');
+            }
             function submitRename(cid) {
               var t = document.getElementById('renameInput_'+cid).value.trim(); if (!t) return;
               var c = activePage().cards.find(function(x){return x.id===cid;}); if (c) c.title=t;
@@ -783,8 +1209,25 @@ enum DefaultWidget {
 
             document.addEventListener('click', function(e) { if (!e.target.closest('.context-menu') && !e.target.closest('.card-menu-btn')) hideContextMenu(); });
             document.addEventListener('keydown', function(e) {
-              if (e.key==='Enter' && e.target.tagName==='INPUT') { var f=e.target.closest('.inline-form,.card-form'); if(f){var b=f.querySelector('.btn-primary');if(b)b.click();} }
-              if (e.key==='Escape') { if(selectMode){exitSelectMode();return;} hideConfirm(); }
+              // Enter in inline edit → save
+              if (e.key==='Enter' && (editingItemId || editingSectionId)) {
+                if (e.target.tagName==='TEXTAREA' && e.shiftKey) return; // allow shift+enter in textarea
+                e.preventDefault();
+                var row = e.target.closest('.row-editing');
+                var sec = e.target.closest('.section-title-editing');
+                if (row) { trySaveEditItem(row.dataset.editCard, row.dataset.editSection, row.dataset.editItem); }
+                else if (sec) { trySaveEditSection(sec.dataset.editCard, sec.dataset.editSid); }
+                return;
+              }
+              if (e.key==='Enter' && e.target.tagName==='INPUT') {
+                var f=e.target.closest('.inline-form,.card-form');
+                if(f){ e.preventDefault(); e.target.blur(); }
+              }
+              if (e.key==='Enter' && !e.shiftKey && e.target.tagName==='TEXTAREA') {
+                var f=e.target.closest('.inline-form,.card-form');
+                if(f){ e.preventDefault(); e.target.blur(); }
+              }
+              if (e.key==='Escape') { if(editingItemId||editingSectionId){cancelEdit();return;} if(selectMode){exitSelectMode();return;} hideConfirm(); }
             });
 
             if (data.pages.length) activePageId = data.pages[0].id;

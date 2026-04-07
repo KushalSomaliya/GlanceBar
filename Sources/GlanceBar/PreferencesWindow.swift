@@ -3,21 +3,27 @@ import SwiftUI
 struct PreferencesView: View {
     let preferences: PreferencesManager
     var onThemeChanged: (() -> Void)?
+    var onShortcutChanged: (() -> Void)?
 
     @State private var selectedCorner: ScreenCorner
     @State private var panelWidth: Double
     @State private var launchAtLogin: Bool
     @State private var widgetPath: String
     @State private var selectedTheme: String
+    @State private var shortcutDisplay: String
+    @State private var isRecording = false
+    @State private var keyMonitor: Any?
 
-    init(preferences: PreferencesManager, onThemeChanged: (() -> Void)? = nil) {
+    init(preferences: PreferencesManager, onThemeChanged: (() -> Void)? = nil, onShortcutChanged: (() -> Void)? = nil) {
         self.preferences = preferences
         self.onThemeChanged = onThemeChanged
+        self.onShortcutChanged = onShortcutChanged
         _selectedCorner = State(initialValue: preferences.hotCorner)
         _panelWidth = State(initialValue: Double(preferences.panelWidth))
         _launchAtLogin = State(initialValue: preferences.launchAtLogin)
         _widgetPath = State(initialValue: preferences.widgetFilePath)
         _selectedTheme = State(initialValue: preferences.theme)
+        _shortcutDisplay = State(initialValue: preferences.shortcutDisplayString)
     }
 
     var body: some View {
@@ -32,6 +38,37 @@ struct PreferencesView: View {
                 .onChange(of: selectedTheme) { _, newValue in
                     preferences.theme = newValue
                     onThemeChanged?()
+                }
+            }
+
+            Section("Keyboard Shortcut") {
+                HStack {
+                    Text("Toggle Panel")
+                    Spacer()
+                    Button(action: { toggleRecording() }) {
+                        Text(isRecording ? "Press keys..." : shortcutDisplay)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(isRecording ? Color.blue.opacity(0.2) : Color.gray.opacity(0.15))
+                            .cornerRadius(6)
+                            .foregroundStyle(isRecording ? .blue : .primary)
+                            .font(.system(size: 12, weight: .medium, design: isRecording ? .default : .monospaced))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                HStack {
+                    Button("Clear Shortcut") {
+                        stopRecording()
+                        preferences.shortcutKey = ""
+                        shortcutDisplay = "None"
+                        onShortcutChanged?()
+                    }
+                    .font(.caption)
+                    Spacer()
+                    Text("Click shortcut to re-record")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -84,6 +121,57 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420, height: 450)
+        .frame(width: 420, height: 540)
+        .onDisappear { stopRecording() }
+    }
+
+    private func toggleRecording() {
+        if isRecording {
+            stopRecording()
+        } else {
+            startRecording()
+        }
+    }
+
+    private func startRecording() {
+        isRecording = true
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Escape = cancel
+            if event.keyCode == 53 {
+                stopRecording()
+                return nil
+            }
+            // Delete = clear
+            if event.keyCode == 51 || event.keyCode == 117 {
+                stopRecording()
+                preferences.shortcutKey = ""
+                shortcutDisplay = "None"
+                onShortcutChanged?()
+                return nil
+            }
+            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                .subtracting(NSEvent.ModifierFlags.capsLock)
+                .subtracting(NSEvent.ModifierFlags.numericPad)
+                .subtracting(NSEvent.ModifierFlags.function)
+            let hasModifier = mods.contains(NSEvent.ModifierFlags.command) ||
+                              mods.contains(NSEvent.ModifierFlags.control) ||
+                              mods.contains(NSEvent.ModifierFlags.option)
+            if hasModifier, let chars = event.charactersIgnoringModifiers, !chars.isEmpty {
+                preferences.shortcutKey = chars
+                preferences.shortcutModifiers = mods
+                shortcutDisplay = preferences.shortcutDisplayString
+                onShortcutChanged?()
+                stopRecording()
+            }
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        isRecording = false
+        if let m = keyMonitor {
+            NSEvent.removeMonitor(m)
+            keyMonitor = nil
+        }
     }
 }

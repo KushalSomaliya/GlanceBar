@@ -33,7 +33,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotCornerMonitor.start()
 
         globalShortcutManager = GlobalShortcutManager(
-            onToggle: { [weak self] in self?.togglePanel() }
+            onToggle: { [weak self] in self?.togglePanel() },
+            preferencesManager: preferencesManager
         )
         globalShortcutManager.start()
 
@@ -66,9 +67,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let prefsView = PreferencesView(preferences: preferencesManager, onThemeChanged: { [weak self] in
-            self?.panelController.applyTheme()
-        })
+        let prefsView = PreferencesView(
+            preferences: preferencesManager,
+            onThemeChanged: { [weak self] in self?.panelController.applyTheme() },
+            onShortcutChanged: { [weak self] in self?.globalShortcutManager.restart() }
+        )
         let hostingController = NSHostingController(rootView: prefsView)
         let window = NSWindow(contentViewController: hostingController)
         window.title = "GlanceBar Preferences"
