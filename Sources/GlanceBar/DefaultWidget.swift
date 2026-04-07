@@ -442,9 +442,38 @@ enum DefaultWidget {
             pointer-events: none; z-index: 1200;
           }
           .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+          .update-banner {
+            display: none; margin-bottom: 10px;
+            background: linear-gradient(135deg, rgba(10,132,255,0.15), rgba(94,92,230,0.15));
+            border: 1px solid rgba(10,132,255,0.3);
+            border-radius: 10px; padding: 10px 14px;
+            animation: fadeSlideIn 0.3s ease;
+          }
+          .update-banner.show { display: flex; align-items: center; gap: 10px; }
+          .update-banner-text { flex: 1; font-size: 12px; color: var(--text); }
+          .update-banner-text strong { color: var(--accent); }
+          .update-banner-btn {
+            padding: 5px 14px; border: none; border-radius: 6px;
+            background: var(--accent); color: white;
+            font-size: 11px; font-weight: 600; cursor: pointer;
+            font-family: inherit; transition: opacity 0.15s;
+          }
+          .update-banner-btn:hover { opacity: 0.85; }
+          .update-banner-close {
+            width: 18px; height: 18px; border: none; background: none;
+            color: var(--text-dim); font-size: 14px; cursor: pointer;
+            border-radius: 4px; display: flex; align-items: center; justify-content: center;
+          }
+          .update-banner-close:hover { background: var(--hover-bg); color: var(--text-muted); }
         </style>
         </head>
         <body>
+          <div class="update-banner" id="updateBanner">
+            <div class="update-banner-text">Update <strong id="updateVersion"></strong> available</div>
+            <button class="update-banner-btn" onclick="runUpdate()">Update</button>
+            <button class="update-banner-close" onclick="dismissUpdate()">&times;</button>
+          </div>
           <div id="app"></div>
           <div class="context-menu" id="contextMenu"></div>
           <div class="confirm-overlay" id="confirmOverlay"><div class="confirm-box" id="confirmBox"></div></div>
@@ -1229,6 +1258,20 @@ enum DefaultWidget {
               }
               if (e.key==='Escape') { if(editingItemId||editingSectionId){cancelEdit();return;} if(selectMode){exitSelectMode();return;} hideConfirm(); }
             });
+
+            // UPDATE BANNER
+            window.showUpdateBanner = function(version) {
+              document.getElementById('updateVersion').textContent = version;
+              document.getElementById('updateBanner').classList.add('show');
+            };
+            function dismissUpdate() { document.getElementById('updateBanner').classList.remove('show'); }
+            function runUpdate() {
+              var btn = document.querySelector('.update-banner-btn');
+              btn.textContent = 'Updating...';
+              btn.style.pointerEvents = 'none';
+              btn.style.opacity = '0.6';
+              if (window.GlanceBar) window.webkit.messageHandlers.glancebar.postMessage({ action: 'runUpdate' });
+            }
 
             if (data.pages.length) activePageId = data.pages[0].id;
             render();

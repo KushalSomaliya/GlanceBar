@@ -22,19 +22,19 @@ Your widget is a plain HTML file. Edit it, save it, and it live-reloads instantl
 **Requirements:** macOS 14+ (Sonoma), Swift CLI tools (`xcode-select --install`)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/GlanceBar.git
-cd GlanceBar
-./build.sh
-open GlanceBar.app
-
-# Optional: copy to Applications
-cp -r GlanceBar.app /Applications/
+git clone https://github.com/KushalSomaliya/GlanceBar.git ~/.glancebar-src && bash ~/.glancebar-src/install.sh
 ```
 
-**Quick reopen alias** (add to your `.zshrc`):
+This clones the repo, builds it, installs to `~/Applications/`, and sets up `glancebar` and `glancebar-update` aliases. You can read `install.sh` before running it.
+
+## Update
+
+GlanceBar checks for updates on launch. If a new version is available, you'll see a banner at the top of the widget — click "Update" and it pulls, rebuilds, and restarts automatically.
+
+You can also update manually:
 
 ```bash
-echo 'alias glancebar="open ~/Documents/personal/GlanceBar/GlanceBar.app"' >> ~/.zshrc && source ~/.zshrc
+glancebar-update
 ```
 
 ## Usage

@@ -132,6 +132,8 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
             handleExport()
         case "importData":
             handleImport()
+        case "runUpdate":
+            handleUpdate()
         default:
             break
         }
@@ -153,6 +155,26 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
         if savePanel.runModal() == .OK, let url = savePanel.url {
             try? jsonData.write(to: url)
             webView.evaluateJavaScript("showToast('Exported successfully')") { _, _ in }
+        }
+    }
+
+    private func handleUpdate() {
+        let srcDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".glancebar-src")
+        let updateScript = srcDir.appendingPathComponent("update.sh")
+
+        if FileManager.default.fileExists(atPath: updateScript.path) {
+            // Run update.sh in background
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/bin/bash")
+            task.arguments = [updateScript.path]
+            task.currentDirectoryURL = srcDir
+            try? task.run()
+        } else {
+            // Fallback: open the GitHub releases page
+            if let url = URL(string: "https://github.com/\(AppConstants.githubRepo)/releases") {
+                NSWorkspace.shared.open(url)
+            }
         }
     }
 

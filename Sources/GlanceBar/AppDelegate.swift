@@ -10,6 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var globalShortcutManager: GlobalShortcutManager!
     private var preferencesManager: PreferencesManager!
     private var preferencesWindowController: NSWindowController?
+    private var updateChecker: UpdateChecker!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         preferencesManager = PreferencesManager()
@@ -39,6 +40,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         globalShortcutManager.start()
 
         startFileWatcher()
+
+        // Check for updates
+        updateChecker = UpdateChecker()
+        updateChecker.onUpdateAvailable = { [weak self] version in
+            self?.panelController.showUpdateBanner(version: version)
+        }
+        updateChecker.checkForUpdates()
+
+        // Re-apply theme when macOS appearance changes (light/dark schedule)
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.panelController.applyTheme()
+        }
 
         // Auto-close panel on desktop/space switch
         NSWorkspace.shared.notificationCenter.addObserver(

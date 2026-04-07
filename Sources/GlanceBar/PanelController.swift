@@ -85,6 +85,13 @@ class PanelController {
         webViewController.reload()
     }
 
+    func showUpdateBanner(version: String) {
+        let escaped = version.replacingOccurrences(of: "'", with: "\\'")
+        webViewController.webView.evaluateJavaScript(
+            "if(window.showUpdateBanner) showUpdateBanner('\(escaped)');"
+        ) { _, _ in }
+    }
+
     func applyTheme() {
         let theme = preferencesManager.theme
         webViewController.setTheme(theme)
