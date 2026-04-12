@@ -249,6 +249,7 @@ enum DefaultWidget {
           .row.drag-over-bottom { border-bottom-color: var(--drag-indicator); }
 
           .label { color: var(--text-muted); font-size: 12px; flex: 1; }
+          .recent-source { font-size: 10px; opacity: 0.6; margin-left: 5px; font-style: italic; font-weight: 400; }
           .value {
             font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
             color: var(--text-muted); transition: color 0.08s;
@@ -483,7 +484,7 @@ enum DefaultWidget {
             var DEFAULT_DATA = {
               pages: [
                 {
-                  id: 'page_1', name: 'Main',
+                  id: 'page_1', name: 'Main', recents: [],
                   cards: [
                     {
                       id: 'card_1', title: 'Quick Reference', hideValues: false,
@@ -535,6 +536,29 @@ enum DefaultWidget {
               return c ? findSection(c.sections, sectionId) : null;
             }
 
+            // Recursive item finder by id across nested sections
+            function findItemInSections(sections, itemId) {
+              for (var i = 0; i < sections.length; i++) {
+                var s = sections[i];
+                if (s.items) {
+                  var it = s.items.find(function(x){ return x.id === itemId; });
+                  if (it) return { section: s, item: it };
+                }
+                if (s.sections) {
+                  var found = findItemInSections(s.sections, itemId);
+                  if (found) return found;
+                }
+              }
+              return null;
+            }
+            function resolveRecent(page, ref) {
+              var card = page.cards.find(function(c){ return c.id === ref.cardId; });
+              if (!card) return null;
+              var hit = findItemInSections(card.sections, ref.itemId);
+              if (!hit) return null;
+              return { card: card, section: hit.section, item: hit.item };
+            }
+
             window._onDataLoaded = function(saved) {
               if (!saved) return;
               // Migrate old format: { cards: [...] } → { pages: [{ cards: [...] }] }
@@ -544,6 +568,7 @@ enum DefaultWidget {
               } else if (saved.pages) {
                 data = saved;
               }
+              data.pages.forEach(function(p){ if (!p.recents) p.recents = []; });
               activePageId = data.pages[0] ? data.pages[0].id : null;
               render();
             };
@@ -557,6 +582,9 @@ enum DefaultWidget {
               var app = document.getElementById('app');
               var html = renderTabBar();
               if (page) {
+                html += '<div class="card recents-card" id="recents-mount" data-card="__recents__" style="display:none">' +
+                  '<div class="card-header"><div class="card-title">Recently Copied</div></div>' +
+                  '<div id="recents-rows"></div></div>';
                 html += page.cards.map(function(card) { return renderCard(card); }).join('');
               }
               html += '<div class="card-form" id="newCardForm" data-form-type="card">' +
@@ -575,6 +603,7 @@ enum DefaultWidget {
                   '<button class="btn btn-danger" onclick="confirmDeleteSelected()" ' + (count===0?'style="opacity:0.4;pointer-events:none"':'') + '>Delete</button></div>';
               }
               app.innerHTML = html;
+              updateRecentsMount();
             }
 
             function renderTabBar() {
@@ -589,6 +618,51 @@ enum DefaultWidget {
               html += '<button class="tab-add" onclick="addPage()">+</button>';
               html += '</div>';
               return html;
+            }
+
+            function computeRecentSuffixes(resolved) {
+              var suffixes = resolved.map(function(){ return ''; });
+              var groups = {};
+              resolved.forEach(function(x, i){
+                var k = (x.res.item.label || '').toLowerCase();
+                if (!groups[k]) groups[k] = [];
+                groups[k].push(i);
+              });
+              Object.keys(groups).forEach(function(k){
+                var ids = groups[k];
+                if (ids.length <= 1) return;
+                var cards = ids.map(function(i){ return resolved[i].res.card.title; });
+                var uniqueByCard = new Set(cards).size === cards.length;
+                ids.forEach(function(i){
+                  var card = resolved[i].res.card.title;
+                  suffixes[i] = uniqueByCard ? card : card + ' \u203A ' + resolved[i].res.section.title;
+                });
+              });
+              return suffixes;
+            }
+
+            function updateRecentsMount() {
+              var mount = document.getElementById('recents-mount');
+              if (!mount) return;
+              var rowsHost = document.getElementById('recents-rows');
+              var page = activePage();
+              var resolved = [];
+              if (page && page.recents && !selectMode) {
+                page.recents.forEach(function(r){
+                  var res = resolveRecent(page, r);
+                  if (res) resolved.push({ ref: r, res: res });
+                });
+              }
+              if (!resolved.length) {
+                mount.style.display = 'none';
+                if (rowsHost) rowsHost.innerHTML = '';
+                return;
+              }
+              var suffixes = computeRecentSuffixes(resolved);
+              rowsHost.innerHTML = resolved.map(function(x, i){
+                return renderRow(x.ref.cardId, x.ref.sectionId, x.res.item, x.res.card.hideValues, false, 0, true, suffixes[i]);
+              }).join('');
+              mount.style.display = '';
             }
 
             function renderCard(card) {
@@ -634,7 +708,7 @@ enum DefaultWidget {
                 '</div>';
             }
 
-            function renderRow(cardId, sectionId, item, hideValues, isSel, idx) {
+            function renderRow(cardId, sectionId, item, hideValues, isSel, idx, isRecent, recentSuffix) {
               var chk = isSel && selected[item.id];
               var firstLine = item.value.split('\n')[0];
               var isLong = item.value.length > 30 || item.value.includes('\n');
@@ -654,6 +728,12 @@ enum DefaultWidget {
                 valHtml = '<span class="value-dots">\u2022\u2022\u2022\u2022\u2022\u2022</span><span class="value value-real">' + esc(firstLine) + '</span>';
               } else {
                 valHtml = '<span class="value">' + esc(firstLine) + '</span>' + tooltipHtml;
+              }
+              if (isRecent) {
+                var srcHtml = recentSuffix ? '<span class="recent-source">' + esc(recentSuffix) + '</span>' : '';
+                return '<div class="row recent-row" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
+                  'onclick="copyById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',' + hideValues + ',true)">' +
+                  '<span class="label">' + esc(item.label) + srcHtml + '</span>' + valHtml + '</div>';
               }
               if (isSel) {
                 return '<div class="row" onclick="toggleSelectItem(\'' + item.id + '\')">' +
@@ -718,13 +798,33 @@ enum DefaultWidget {
             }
 
             // ===== COPY =====
-            function copyById(row, cardId, sectionId, itemId, isHidden) {
+            function copyById(row, cardId, sectionId, itemId, isHidden, fromRecents) {
               var sec = findSectionInCard(cardId, sectionId);
               if (!sec) return;
               var item = sec.items.find(function(i){ return i.id === itemId; });
               if (!item) return;
               copyValue(row, item.value, isHidden);
+              trackRecent(cardId, sectionId, itemId, fromRecents);
             }
+            var _recentsDirty = false;
+            function trackRecent(cardId, sectionId, itemId, fromRecents) {
+              var page = activePage();
+              if (!page) return;
+              if (!page.recents) page.recents = [];
+              page.recents = page.recents.filter(function(r){ return r.itemId !== itemId; });
+              page.recents.unshift({ cardId: cardId, sectionId: sectionId, itemId: itemId });
+              if (page.recents.length > 5) page.recents = page.recents.slice(0, 5);
+              save();
+              if (fromRecents) {
+                _recentsDirty = true;
+              } else {
+                _recentsDirty = false;
+                updateRecentsMount();
+              }
+            }
+            window._onPanelShow = function() {
+              if (_recentsDirty) { _recentsDirty = false; updateRecentsMount(); }
+            };
             var scrambleChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*';
             var matrixChars = '\u30A2\u30AB\u30B5\u30BF\u30CA\u30CF\u30DE\u30E4\u30E9\u30EF01234789';
             var binaryChars = '01';
@@ -1142,7 +1242,7 @@ enum DefaultWidget {
             function switchPage(pageId) { activePageId = pageId; exitSelectMode(); }
             function addPage() {
               var name = 'Page ' + (data.pages.length + 1);
-              var newPage = { id: uid(), name: name, cards: [] };
+              var newPage = { id: uid(), name: name, cards: [], recents: [] };
               data.pages.push(newPage);
               activePageId = newPage.id;
               save(); render();

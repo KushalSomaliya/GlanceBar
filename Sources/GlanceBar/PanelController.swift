@@ -159,6 +159,7 @@ class PanelController {
             self?.isVisible = true
             self?.panel.makeKey()
             self?.installDismissMonitors()
+            self?.webViewController.webView.evaluateJavaScript("if(window._onPanelShow)window._onPanelShow();") { _, _ in }
         })
     }
 
