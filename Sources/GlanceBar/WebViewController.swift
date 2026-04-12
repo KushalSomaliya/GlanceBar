@@ -32,6 +32,9 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
                     },
                     importData: function() {
                         window.webkit.messageHandlers.glancebar.postMessage({ action: 'importData' });
+                    },
+                    runAction: function(id, command, timeout) {
+                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'runAction', id: id, command: command, timeout: timeout || 30 });
                     }
                 };
                 """,
@@ -134,9 +137,78 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
             handleImport()
         case "runUpdate":
             handleUpdate()
+        case "runAction":
+            if let id = body["id"] as? String, let command = body["command"] as? String {
+                let timeout = (body["timeout"] as? Double) ?? 30
+                runAction(id: id, command: command, timeout: timeout)
+            }
         default:
             break
         }
+    }
+
+    // MARK: - runAction
+
+    private func runAction(id: String, command: String, timeout: Double) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", command]
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
+
+            var timedOut = false
+            let timeoutWork = DispatchWorkItem {
+                if process.isRunning {
+                    timedOut = true
+                    process.terminate()
+                }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutWork)
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                timeoutWork.cancel()
+
+                let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
+                let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+                let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let payload: [String: Any]
+                if timedOut {
+                    payload = ["ok": false, "error": "Timed out after \(Int(timeout))s"]
+                } else if process.terminationStatus != 0 {
+                    let errTrimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let snippet = errTrimmed.isEmpty ? "Exit code \(process.terminationStatus)" : String(errTrimmed.prefix(200))
+                    payload = ["ok": false, "error": snippet]
+                } else {
+                    payload = ["ok": true, "stdout": trimmed]
+                }
+
+                DispatchQueue.main.async { [weak self] in
+                    self?.postActionResult(id: id, payload: payload)
+                }
+            } catch {
+                timeoutWork.cancel()
+                DispatchQueue.main.async { [weak self] in
+                    self?.postActionResult(id: id, payload: ["ok": false, "error": error.localizedDescription])
+                }
+            }
+        }
+    }
+
+    private func postActionResult(id: String, payload: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let jsonStr = String(data: data, encoding: .utf8)
+        else { return }
+        let escapedId = id.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'")
+        let js = "if(window._actionResult)window._actionResult('\(escapedId)', \(jsonStr));"
+        webView.evaluateJavaScript(js) { _, _ in }
     }
 
     // MARK: - Import / Export

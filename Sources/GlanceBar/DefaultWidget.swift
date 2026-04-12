@@ -252,6 +252,39 @@ enum DefaultWidget {
 
           .label { color: var(--text-muted); font-size: 12px; flex: 1; }
           .recent-source { font-size: 10px; opacity: 0.75; margin-left: 5px; font-style: italic; font-weight: 400; }
+
+          @keyframes actionSpin { to { transform: rotate(360deg); } }
+          .value-run {
+            display: inline-flex; align-items: center; justify-content: center;
+            position: relative;
+            min-width: 58px; height: 20px;
+            padding: 0 10px;
+            font-size: 10px; font-weight: 600; letter-spacing: 0.05em;
+            color: var(--accent);
+            background: rgba(10, 132, 255, 0.12);
+            border: 1px solid rgba(10, 132, 255, 0.3);
+            border-radius: 999px;
+            transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease, transform 0.08s ease;
+            user-select: none; -webkit-user-select: none;
+          }
+          .row-action:hover .value-run { background: rgba(10, 132, 255, 0.22); border-color: rgba(10, 132, 255, 0.5); }
+          .row-action:active .value-run { transform: scale(0.95); }
+          .row-action.running { pointer-events: none; }
+          .row-action.running .value-run { color: transparent; background: rgba(10, 132, 255, 0.08); }
+          .value-run.copied {
+            color: var(--success) !important;
+            background: rgba(52, 199, 89, 0.18) !important;
+            border-color: rgba(52, 199, 89, 0.55) !important;
+          }
+          .row-action.running .value-run::after {
+            content: ''; position: absolute;
+            width: 11px; height: 11px;
+            border: 1.5px solid rgba(10, 132, 255, 0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: actionSpin 0.7s linear infinite;
+          }
+          .action-command-field { font-family: 'SF Mono', Menlo, monospace !important; font-size: 11px !important; }
           .value {
             font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
             color: var(--text-muted); transition: color 0.08s;
@@ -704,26 +737,61 @@ enum DefaultWidget {
                 '<input id="inp_label_' + section.id + '" placeholder="Label">' +
                 '<textarea id="inp_value_' + section.id + '" placeholder="Value" rows="1"></textarea>' +
                 '</div>' +
+                '<div class="inline-form" id="actionForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="action">' +
+                '<input id="act_label_' + section.id + '" placeholder="Action label">' +
+                '<textarea id="act_command_' + section.id + '" class="action-command-field" placeholder="Shell command" rows="1"></textarea>' +
+                '</div>' +
                 childSections.map(function(cs) { return renderSection(cardId, cs, hideValues, isSel, depth + 1); }).join('') +
                 '<div class="card-form" id="newSubsectionForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="subsection">' +
                 '<div class="form-row"><input id="newSubsectionTitle_' + section.id + '" placeholder="New subsection name"></div></div>' +
                 '</div>';
             }
 
+            function renderActionRow(cardId, sectionId, item, isSel, isRecent, recentSuffix) {
+              var chk = isSel && selected[item.id];
+              var srcHtml = recentSuffix ? '<span class="recent-source">' + esc(recentSuffix) + '</span>' : '';
+              var labelHtml = '<span class="label">' + esc(item.label) + srcHtml + '</span>';
+              var valHtml = '<span class="value-run">RUN</span>';
+              var runningCls = _runningActions[item.id] ? ' running' : '';
+
+              if (isRecent) {
+                return '<div class="row row-action recent-row' + runningCls + '" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
+                  'onclick="runActionById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',true)">' +
+                  labelHtml + valHtml + '</div>';
+              }
+              if (isSel) {
+                return '<div class="row row-action' + runningCls + '" onclick="toggleSelectItem(\'' + item.id + '\')">' +
+                  '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
+                  labelHtml + valHtml + '</div>';
+              }
+              return '<div class="row row-action' + runningCls + '" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
+                'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
+                'onclick="runActionById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',false)" ' +
+                'oncontextmenu="showEntryMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
+                '<span class="drag-handle">\u2630</span>' +
+                labelHtml + valHtml + '</div>';
+            }
+
             function renderRow(cardId, sectionId, item, hideValues, isSel, idx, isRecent, recentSuffix) {
+              // Inline editing mode (works for both static and action items)
+              if (editingItemId === item.id) {
+                var content = item.type === 'action' ? (item.command || '') : (item.value || '');
+                var rowsN = Math.min(content.split('\n').length, 4);
+                var fieldCls = item.type === 'action' ? ' class="action-command-field"' : '';
+                return '<div class="row-editing" data-edit-card="' + cardId + '" data-edit-section="' + sectionId + '" data-edit-item="' + item.id + '">' +
+                  '<input id="edit_label_' + item.id + '" value="' + esc(item.label) + '">' +
+                  '<textarea id="edit_value_' + item.id + '" rows="' + rowsN + '"' + fieldCls + '>' + esc(content) + '</textarea>' +
+                  '</div>';
+              }
+
+              if (item.type === 'action') {
+                return renderActionRow(cardId, sectionId, item, isSel, isRecent, recentSuffix);
+              }
+
               var chk = isSel && selected[item.id];
               var firstLine = item.value.split('\n')[0];
               var isLong = item.value.length > 30 || item.value.includes('\n');
               var tooltipHtml = isLong && !hideValues ? '<div class="value-tooltip">' + esc(item.value) + '</div>' : '';
-
-              // Inline editing mode
-              if (editingItemId === item.id) {
-                var escapedVal = esc(item.value);
-                return '<div class="row-editing" data-edit-card="' + cardId + '" data-edit-section="' + sectionId + '" data-edit-item="' + item.id + '">' +
-                  '<input id="edit_label_' + item.id + '" value="' + esc(item.label) + '">' +
-                  '<textarea id="edit_value_' + item.id + '" rows="' + Math.min(item.value.split('\n').length, 4) + '">' + escapedVal + '</textarea>' +
-                  '</div>';
-              }
 
               var valHtml;
               if (hideValues) {
@@ -827,6 +895,60 @@ enum DefaultWidget {
             window._onPanelShow = function() {
               if (_recentsDirty) { _recentsDirty = false; updateRecentsMount(); }
             };
+
+            // ===== ACTIONS (run shell command, copy stdout) =====
+            var _runningActions = {};
+            var _pendingActions = {};
+            window._actionResult = function(id, payload) {
+              var p = _pendingActions[id];
+              if (!p) return;
+              delete _pendingActions[id];
+              if (payload && payload.ok) p.resolve(payload.stdout || '');
+              else p.reject(payload && payload.error ? payload.error : 'Action failed');
+            };
+            function runActionPromise(command) {
+              return new Promise(function(resolve, reject) {
+                var id = 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+                _pendingActions[id] = { resolve: resolve, reject: reject };
+                if (window.GlanceBar && GlanceBar.runAction) GlanceBar.runAction(id, command, 30);
+                else { delete _pendingActions[id]; reject('Bridge unavailable'); }
+              });
+            }
+            function runActionById(row, cardId, sectionId, itemId, fromRecents) {
+              if (selectMode) { toggleSelectItem(itemId); return; }
+              if (_runningActions[itemId]) return;
+              var sec = findSectionInCard(cardId, sectionId);
+              if (!sec) return;
+              var item = sec.items.find(function(i){ return i.id === itemId; });
+              if (!item || item.type !== 'action' || !item.command) return;
+
+              _runningActions[itemId] = true;
+              document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){ el.classList.add('running'); });
+
+              runActionPromise(item.command).then(function(stdout) {
+                if (!stdout) {
+                  showToast('Action returned empty output');
+                  return;
+                }
+                // Copy to clipboard via existing bridge
+                if (window.GlanceBar) GlanceBar.copy(stdout);
+                // Animate "Copied" on each visible row for this item
+                document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){
+                  var v = el.querySelector('.value-run');
+                  if (!v) return;
+                  v.classList.add('copied');
+                  randomEffect()(v, 'COPIED', 300, function(){
+                    setTimeout(function(){ v.classList.remove('copied'); v.textContent = 'RUN'; }, 900);
+                  });
+                });
+                trackRecent(cardId, sectionId, itemId, fromRecents);
+              }).catch(function(err) {
+                showToast('Action failed: ' + (err || 'unknown'));
+              }).finally(function() {
+                delete _runningActions[itemId];
+                document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){ el.classList.remove('running'); });
+              });
+            }
             var scrambleChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*';
             var matrixChars = '\u30A2\u30AB\u30B5\u30BF\u30CA\u30CF\u30DE\u30E4\u30E9\u30EF01234789';
             var binaryChars = '01';
@@ -1032,6 +1154,27 @@ enum DefaultWidget {
               var s = findSectionInCard(cid, sid);
               if (s) { s.items.push({id:uid(),label:l,value:v}); save(); render(); }
             }
+            function showAddActionForm(cid, sid) {
+              var form = document.getElementById('actionForm_'+sid);
+              form.classList.add('show');
+              setTimeout(function(){
+                var labelEl = document.getElementById('act_label_'+sid);
+                var cmdEl = document.getElementById('act_command_'+sid);
+                labelEl.focus();
+                installFormBlur([labelEl, cmdEl], function(){ submitAction(cid, sid); }, function(){ hideAddActionForm(sid); });
+              },50);
+            }
+            function hideAddActionForm(sid) {
+              var form = document.getElementById('actionForm_'+sid);
+              if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input,textarea'); inputs.forEach(function(i){i.value='';}); }
+            }
+            function submitAction(cid, sid) {
+              var l = document.getElementById('act_label_'+sid).value.trim();
+              var c = document.getElementById('act_command_'+sid).value.trim();
+              if (!l||!c) return;
+              var s = findSectionInCard(cid, sid);
+              if (s) { s.items.push({id:uid(),type:'action',label:l,command:c}); save(); render(); }
+            }
             function showNewSectionForm(cid) {
               hideContextMenu();
               document.getElementById('newSectionForm_'+cid).classList.add('show');
@@ -1092,7 +1235,14 @@ enum DefaultWidget {
               var l = labelEl.value.trim(), v = valueEl.value.trim();
               if (l && v) {
                 var sec = findSectionInCard(cid, sid);
-                if (sec) { var item = sec.items.find(function(i){return i.id===iid;}); if(item){item.label=l;item.value=v;} }
+                if (sec) {
+                  var item = sec.items.find(function(i){return i.id===iid;});
+                  if (item) {
+                    item.label = l;
+                    if (item.type === 'action') item.command = v;
+                    else item.value = v;
+                  }
+                }
                 save();
               }
               editingItemId = null; render();
@@ -1175,6 +1325,7 @@ enum DefaultWidget {
               m.innerHTML =
                 '<div class="context-menu-item" onclick="startEditSection(\''+cid+'\',\''+sid+'\')">Rename Section</div>' +
                 '<div class="context-menu-item" onclick="showAddEntryForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Entry</div>' +
+                '<div class="context-menu-item" onclick="showAddActionForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Action</div>' +
                 '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>';
               m.style.left = Math.min(e.clientX, window.innerWidth-170)+'px';
               m.style.top = (e.clientY+4)+'px';
@@ -1187,6 +1338,7 @@ enum DefaultWidget {
               var m = document.getElementById('contextMenu');
               m.innerHTML =
                 '<div class="context-menu-item" onclick="showAddEntryForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Entry</div>' +
+                '<div class="context-menu-item" onclick="showAddActionForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Action</div>' +
                 '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>';
               var r = e.target.getBoundingClientRect();
               m.style.left = Math.min(r.right - 150, window.innerWidth-160)+'px';
