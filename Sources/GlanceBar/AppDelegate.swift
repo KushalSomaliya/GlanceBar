@@ -17,6 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ensureWidgetDirectory()
 
         panelController = PanelController(preferencesManager: preferencesManager)
+        panelController.setOnPreferencesShortcut { [weak self] in self?.showPreferences() }
 
         statusBarController = StatusBarController(
             onToggle: { [weak self] in self?.togglePanel() },

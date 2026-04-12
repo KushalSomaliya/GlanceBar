@@ -12,11 +12,11 @@ enum DefaultWidget {
             --card-bg: rgba(30, 30, 30, 0.7);
             --card-border: rgba(255,255,255,0.08);
             --card-shadow: 0 8px 32px rgba(0,0,0,0.4);
-            --text: #e0e0e0;
-            --text-title: rgba(255,255,255,0.9);
-            --text-muted: rgba(255,255,255,0.5);
-            --text-dim: rgba(255,255,255,0.25);
-            --text-dimmer: rgba(255,255,255,0.15);
+            --text: #f5f5f5;
+            --text-title: rgba(255,255,255,0.98);
+            --text-muted: rgba(255,255,255,0.75);
+            --text-dim: rgba(255,255,255,0.5);
+            --text-dimmer: rgba(255,255,255,0.3);
             --hover-bg: rgba(255,255,255,0.07);
             --active-bg: rgba(255,255,255,0.12);
             --input-bg: rgba(255,255,255,0.1);
@@ -27,23 +27,23 @@ enum DefaultWidget {
             --menu-border: rgba(255,255,255,0.15);
             --confirm-bg: rgba(40,40,40,0.98);
             --btn-secondary-bg: rgba(255,255,255,0.1);
-            --btn-secondary-text: rgba(255,255,255,0.7);
+            --btn-secondary-text: rgba(255,255,255,0.88);
             --dashed-border: rgba(255,255,255,0.15);
             --dashed-bg: rgba(20, 20, 20, 0.4);
             --dashed-hover-border: rgba(255,255,255,0.3);
             --dashed-hover-bg: rgba(20, 20, 20, 0.6);
-            --dashed-text: rgba(255,255,255,0.4);
-            --dots-color: rgba(255,255,255,0.2);
+            --dashed-text: rgba(255,255,255,0.62);
+            --dots-color: rgba(255,255,255,0.38);
             --drag-indicator: #0a84ff;
             --accent: #0a84ff;
             --accent-hover: #0070e0;
             --danger: #ff3b30;
             --danger-text: #ff6961;
             --success: #34c759;
-            --handle-color: rgba(255,255,255,0.15);
-            --handle-hover: rgba(255,255,255,0.4);
-            --footer-text: rgba(255,255,255,0.15);
-            --footer-hover: rgba(255,255,255,0.35);
+            --handle-color: rgba(255,255,255,0.32);
+            --handle-hover: rgba(255,255,255,0.55);
+            --footer-text: rgba(255,255,255,0.4);
+            --footer-hover: rgba(255,255,255,0.6);
           }
 
           @media (prefers-color-scheme: light) {
@@ -51,11 +51,11 @@ enum DefaultWidget {
               --card-bg: rgba(255, 255, 255, 0.82);
               --card-border: rgba(0,0,0,0.06);
               --card-shadow: 0 4px 20px rgba(0,0,0,0.1);
-              --text: #1d1d1f;
-              --text-title: rgba(0,0,0,0.85);
-              --text-muted: rgba(0,0,0,0.45);
-              --text-dim: rgba(0,0,0,0.25);
-              --text-dimmer: rgba(0,0,0,0.12);
+              --text: #0a0a0c;
+              --text-title: rgba(0,0,0,0.96);
+              --text-muted: rgba(0,0,0,0.72);
+              --text-dim: rgba(0,0,0,0.5);
+              --text-dimmer: rgba(0,0,0,0.28);
               --hover-bg: rgba(0,0,0,0.04);
               --active-bg: rgba(0,0,0,0.08);
               --input-bg: rgba(0,0,0,0.04);
@@ -66,17 +66,17 @@ enum DefaultWidget {
               --menu-border: rgba(0,0,0,0.12);
               --confirm-bg: rgba(255,255,255,0.98);
               --btn-secondary-bg: rgba(0,0,0,0.06);
-              --btn-secondary-text: rgba(0,0,0,0.6);
+              --btn-secondary-text: rgba(0,0,0,0.82);
               --dashed-border: rgba(0,0,0,0.12);
               --dashed-bg: rgba(255,255,255,0.4);
               --dashed-hover-border: rgba(0,0,0,0.2);
               --dashed-hover-bg: rgba(255,255,255,0.6);
-              --dashed-text: rgba(0,0,0,0.3);
-              --dots-color: rgba(0,0,0,0.15);
-              --handle-color: rgba(0,0,0,0.12);
-              --handle-hover: rgba(0,0,0,0.35);
-              --footer-text: rgba(0,0,0,0.15);
-              --footer-hover: rgba(0,0,0,0.35);
+              --dashed-text: rgba(0,0,0,0.55);
+              --dots-color: rgba(0,0,0,0.32);
+              --handle-color: rgba(0,0,0,0.3);
+              --handle-hover: rgba(0,0,0,0.55);
+              --footer-text: rgba(0,0,0,0.4);
+              --footer-hover: rgba(0,0,0,0.6);
             }
           }
 
@@ -85,11 +85,11 @@ enum DefaultWidget {
             --card-bg: rgba(255, 255, 255, 0.82);
             --card-border: rgba(0,0,0,0.06);
             --card-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            --text: #1d1d1f;
-            --text-title: rgba(0,0,0,0.85);
-            --text-muted: rgba(0,0,0,0.45);
-            --text-dim: rgba(0,0,0,0.25);
-            --text-dimmer: rgba(0,0,0,0.12);
+            --text: #0a0a0c;
+            --text-title: rgba(0,0,0,0.96);
+            --text-muted: rgba(0,0,0,0.72);
+            --text-dim: rgba(0,0,0,0.5);
+            --text-dimmer: rgba(0,0,0,0.28);
             --hover-bg: rgba(0,0,0,0.04);
             --active-bg: rgba(0,0,0,0.08);
             --input-bg: rgba(0,0,0,0.04);
@@ -100,17 +100,17 @@ enum DefaultWidget {
             --menu-border: rgba(0,0,0,0.12);
             --confirm-bg: rgba(255,255,255,0.98);
             --btn-secondary-bg: rgba(0,0,0,0.06);
-            --btn-secondary-text: rgba(0,0,0,0.6);
+            --btn-secondary-text: rgba(0,0,0,0.82);
             --dashed-border: rgba(0,0,0,0.12);
             --dashed-bg: rgba(255,255,255,0.4);
             --dashed-hover-border: rgba(0,0,0,0.2);
             --dashed-hover-bg: rgba(255,255,255,0.6);
-            --dashed-text: rgba(0,0,0,0.3);
-            --dots-color: rgba(0,0,0,0.15);
-            --handle-color: rgba(0,0,0,0.12);
-            --handle-hover: rgba(0,0,0,0.35);
-            --footer-text: rgba(0,0,0,0.15);
-            --footer-hover: rgba(0,0,0,0.35);
+            --dashed-text: rgba(0,0,0,0.55);
+            --dots-color: rgba(0,0,0,0.32);
+            --handle-color: rgba(0,0,0,0.3);
+            --handle-hover: rgba(0,0,0,0.55);
+            --footer-text: rgba(0,0,0,0.4);
+            --footer-hover: rgba(0,0,0,0.6);
           }
 
           body {
@@ -169,6 +169,7 @@ enum DefaultWidget {
           @keyframes scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
 
           .card {
+            position: relative;
             background: var(--card-bg);
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             border-radius: 14px;
@@ -178,6 +179,7 @@ enum DefaultWidget {
             margin-bottom: 10px;
             animation: scaleIn 0.25s ease;
           }
+          .card:has(.row:hover) { z-index: 10; }
 
           .card-header { display: flex; align-items: center; margin-bottom: 10px; }
           .card-title { font-size: 13px; font-weight: 600; color: var(--text-title); flex: 1; letter-spacing: 0.02em; }
@@ -249,7 +251,7 @@ enum DefaultWidget {
           .row.drag-over-bottom { border-bottom-color: var(--drag-indicator); }
 
           .label { color: var(--text-muted); font-size: 12px; flex: 1; }
-          .recent-source { font-size: 10px; opacity: 0.6; margin-left: 5px; font-style: italic; font-weight: 400; }
+          .recent-source { font-size: 10px; opacity: 0.75; margin-left: 5px; font-style: italic; font-weight: 400; }
           .value {
             font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
             color: var(--text-muted); transition: color 0.08s;

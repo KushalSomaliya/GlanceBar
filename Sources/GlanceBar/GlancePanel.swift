@@ -4,6 +4,8 @@ class GlancePanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    var onPreferencesShortcut: (() -> Void)?
+
     // Forward standard edit commands (Cmd+V, Cmd+C, Cmd+X, Cmd+A)
     // to the WKWebView's first responder, since nonactivatingPanel
     // doesn't route these through the normal responder chain.
@@ -11,6 +13,9 @@ class GlancePanel: NSPanel {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags == .command, let chars = event.charactersIgnoringModifiers {
             switch chars {
+            case ",":
+                onPreferencesShortcut?()
+                return
             case "v":
                 if let responder = firstResponder {
                     responder.doCommand(by: #selector(NSText.paste(_:)))

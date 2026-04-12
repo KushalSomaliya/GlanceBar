@@ -85,6 +85,10 @@ class PanelController {
         webViewController.reload()
     }
 
+    func setOnPreferencesShortcut(_ handler: @escaping () -> Void) {
+        (panel as? GlancePanel)?.onPreferencesShortcut = handler
+    }
+
     func showUpdateBanner(version: String) {
         let escaped = version.replacingOccurrences(of: "'", with: "\\'")
         webViewController.webView.evaluateJavaScript(
