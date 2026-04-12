@@ -2,6 +2,10 @@
 
 A lightweight macOS menu bar app that provides a custom widget sidebar panel with hot corner and global hotkey activation. Think "Quick Note meets Notification Center" but fully customizable via HTML/CSS/JS.
 
+## Known Issues
+
+- **Invisible menu bar icon on macOS Tahoe** — after many rebuild cycles, the icon may disappear even though the app runs and Cmd+] works. Full troubleshooting guide: [`docs/troubleshooting-invisible-icon.md`](docs/troubleshooting-invisible-icon.md). TL;DR: change `CFBundleIdentifier`.
+
 ## Development Workflow
 
 **IMPORTANT: Always follow this sequence when making changes:**
