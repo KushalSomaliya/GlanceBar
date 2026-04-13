@@ -48,6 +48,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.panelController.showUpdateBanner(version: version)
         }
         updateChecker.checkForUpdates()
+        panelController.setOnPanelShow { [weak self] in self?.updateChecker.checkForUpdates() }
 
         // Re-apply theme when macOS appearance changes (light/dark schedule)
         DistributedNotificationCenter.default().addObserver(

@@ -3,14 +3,19 @@ import Foundation
 class UpdateChecker {
     private let currentVersion: String
     private let repo: String
+    private let minInterval: TimeInterval
+    private var lastCheckedAt: Date?
     var onUpdateAvailable: ((String) -> Void)?
 
-    init(currentVersion: String = AppConstants.version, repo: String = AppConstants.githubRepo) {
+    init(currentVersion: String = AppConstants.version, repo: String = AppConstants.githubRepo, minInterval: TimeInterval = 3600) {
         self.currentVersion = currentVersion
         self.repo = repo
+        self.minInterval = minInterval
     }
 
     func checkForUpdates() {
+        if let last = lastCheckedAt, Date().timeIntervalSince(last) < minInterval { return }
+        lastCheckedAt = Date()
         let urlString = "https://api.github.com/repos/\(repo)/tags?per_page=1"
         guard let url = URL(string: urlString) else { return }
 

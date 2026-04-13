@@ -8,6 +8,7 @@ class PanelController {
     private let preferencesManager: PreferencesManager
     private var clickOutsideMonitor: Any?
     private var escapeMonitor: Any?
+    private var onPanelShow: (() -> Void)?
     private(set) var isVisible = false
     private(set) var isPinnedToDesktop = false
 
@@ -89,6 +90,10 @@ class PanelController {
         (panel as? GlancePanel)?.onPreferencesShortcut = handler
     }
 
+    func setOnPanelShow(_ handler: @escaping () -> Void) {
+        onPanelShow = handler
+    }
+
     func showUpdateBanner(version: String) {
         let escaped = version.replacingOccurrences(of: "'", with: "\\'")
         webViewController.webView.evaluateJavaScript(
@@ -164,6 +169,7 @@ class PanelController {
             self?.panel.makeKey()
             self?.installDismissMonitors()
             self?.webViewController.webView.evaluateJavaScript("if(window._onPanelShow)window._onPanelShow();") { _, _ in }
+            self?.onPanelShow?()
         })
     }
 
