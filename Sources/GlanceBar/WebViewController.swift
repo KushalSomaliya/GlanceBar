@@ -236,17 +236,130 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
         let updateScript = srcDir.appendingPathComponent("update.sh")
 
         if FileManager.default.fileExists(atPath: updateScript.path) {
-            // Run update.sh in background
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/bash")
-            task.arguments = [updateScript.path]
-            task.currentDirectoryURL = srcDir
-            try? task.run()
+            runUpdateScript(updateScript, cwd: srcDir)
         } else {
-            // Fallback: open the GitHub releases page
-            if let url = URL(string: "https://github.com/\(AppConstants.githubRepo)/releases") {
-                NSWorkspace.shared.open(url)
+            bootstrapAndUpdate(srcDir: srcDir)
+        }
+    }
+
+    private func runUpdateScript(_ script: URL, cwd: URL) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/bash")
+        task.arguments = [script.path]
+        task.currentDirectoryURL = cwd
+        // Tell the script to replace the app in-place wherever the running
+        // bundle lives (e.g. /Applications vs ~/Applications) so we don't
+        // leave a duplicate behind.
+        var env = ProcessInfo.processInfo.environment
+        env["GLANCEBAR_TARGET"] = Bundle.main.bundlePath
+        task.environment = env
+
+        // Stream the script's stdout and forward any "→ ..." progress lines
+        // to the banner so the user sees live stage updates.
+        let stdoutPipe = Pipe()
+        task.standardOutput = stdoutPipe
+        var buffer = ""
+        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+            buffer.append(chunk)
+            while let newlineIdx = buffer.firstIndex(of: "\n") {
+                let line = String(buffer[..<newlineIdx]).trimmingCharacters(in: .whitespaces)
+                buffer.removeSubrange(...newlineIdx)
+                if line.hasPrefix("\u{2192} ") {
+                    let status = String(line.dropFirst(2))
+                    self?.callJSUpdateStatus(status)
+                }
             }
+        }
+
+        // On success the script pkill's GlanceBar mid-run, so this never fires.
+        // It only fires if the script exits non-zero before killing us.
+        task.terminationHandler = { [weak self] proc in
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            if proc.terminationStatus != 0 {
+                self?.callJSUpdateBanner(fn: "_onUpdateFailed",
+                                          arg: "Update script exited with code \(proc.terminationStatus)")
+            }
+        }
+        do {
+            try task.run()
+        } catch {
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            callJSUpdateBanner(fn: "_onUpdateFailed",
+                               arg: "Could not start updater: \(error.localizedDescription)")
+        }
+    }
+
+    private func callJSUpdateStatus(_ text: String) {
+        callJSUpdateBanner(fn: "_onUpdateStatus", arg: text)
+    }
+
+    private func bootstrapAndUpdate(srcDir: URL) {
+        callJSUpdateStatus("Cloning repo...")
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let repoURL = "https://github.com/\(AppConstants.githubRepo).git"
+
+            // Make sure parent of srcDir exists (it's $HOME, so always true) and
+            // remove any partial dir from a previous failed bootstrap.
+            try? FileManager.default.removeItem(at: srcDir)
+
+            let clone = Process()
+            clone.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            clone.arguments = ["clone", "--depth", "1", repoURL, srcDir.path]
+            let stderrPipe = Pipe()
+            clone.standardError = stderrPipe
+            clone.standardOutput = Pipe()  // discard stdout
+
+            do {
+                try clone.run()
+                clone.waitUntilExit()
+            } catch {
+                DispatchQueue.main.async {
+                    self.callJSUpdateBanner(fn: "_onUpdateFailed",
+                                            arg: "git not available: \(error.localizedDescription)")
+                }
+                return
+            }
+
+            if clone.terminationStatus != 0 {
+                let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                let err = String(data: errData, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? "clone failed"
+                DispatchQueue.main.async {
+                    self.callJSUpdateBanner(fn: "_onUpdateFailed",
+                                            arg: "Clone failed: \(String(err.prefix(200)))")
+                }
+                return
+            }
+
+            DispatchQueue.main.async {
+                let script = srcDir.appendingPathComponent("update.sh")
+                guard FileManager.default.fileExists(atPath: script.path) else {
+                    self.callJSUpdateBanner(fn: "_onUpdateFailed",
+                                            arg: "update.sh missing from cloned repo")
+                    return
+                }
+                self.runUpdateScript(script, cwd: srcDir)
+            }
+        }
+    }
+
+    private func callJSUpdateBanner(fn: String, arg: String?) {
+        let argLiteral: String
+        if let arg = arg {
+            let escaped = arg
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+            argLiteral = "'\(escaped)'"
+        } else {
+            argLiteral = ""
+        }
+        let js = "if(window.\(fn))window.\(fn)(\(argLiteral));"
+        DispatchQueue.main.async { [weak self] in
+            self?.webView.evaluateJavaScript(js) { _, _ in }
         }
     }
 

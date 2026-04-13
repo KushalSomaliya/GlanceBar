@@ -3,7 +3,7 @@ import Foundation
 enum AppConstants {
     static let appName = "GlanceBar"
     static let bundleIdentifier = "dev.kushal.glancebar"
-    static let version = "1.1.1"
+    static let version = "1.1.2"
     static let githubRepo = "KushalSomaliya/GlanceBar"
 
     static let defaultWidgetDirectory = FileManager.default.homeDirectoryForCurrentUser

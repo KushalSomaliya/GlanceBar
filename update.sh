@@ -8,6 +8,15 @@ SRC_DIR="$HOME/.glancebar-src"
 APP_DIR="$HOME/Applications"
 APP_NAME="GlanceBar.app"
 
+# If invoked from the running app (via the in-app updater), install in-place
+# at the bundle's current location rather than defaulting to ~/Applications.
+# Prevents duplicate GlanceBar.app entries when the user installed elsewhere
+# (e.g. /Applications via a Finder drag).
+if [ -n "${GLANCEBAR_TARGET:-}" ] && [ -d "$GLANCEBAR_TARGET" ]; then
+    APP_DIR=$(dirname "$GLANCEBAR_TARGET")
+    APP_NAME=$(basename "$GLANCEBAR_TARGET")
+fi
+
 # Bundle IDs — old needs to be fully purged from Tahoe's caches
 # (macOS 26 keeps ghost entries in "Allow in Menu Bar" otherwise)
 OLD_BUNDLE_ID="com.kushal.glancebar"

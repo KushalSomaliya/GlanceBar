@@ -494,6 +494,8 @@ enum DefaultWidget {
             background: var(--accent); color: white;
             font-size: 11px; font-weight: 600; cursor: pointer;
             font-family: inherit; transition: opacity 0.15s;
+            min-width: 78px; max-width: 140px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           }
           .update-banner-btn:hover { opacity: 0.85; }
           .update-banner-close {
@@ -1526,6 +1528,33 @@ enum DefaultWidget {
               btn.style.opacity = '0.6';
               if (window.GlanceBar) window.webkit.messageHandlers.glancebar.postMessage({ action: 'runUpdate' });
             }
+            function _resetUpdateBtn() {
+              var btn = document.querySelector('.update-banner-btn');
+              if (!btn) return;
+              btn.textContent = 'Update';
+              btn.style.pointerEvents = '';
+              btn.style.opacity = '';
+            }
+            window._onUpdateStatus = function(text) {
+              var btn = document.querySelector('.update-banner-btn');
+              if (!btn || !text) return;
+              // Map verbose shell messages to short pill-friendly labels
+              var map = {
+                'Checking for updates...': 'Checking...',
+                'Update available! Pulling changes...': 'Pulling...',
+                'Stopping GlanceBar...': 'Stopping...',
+                'Assembling app bundle...': 'Assembling...',
+                'Purging old bundle ID state...': 'Cleaning up...'
+              };
+              var display = map[text] || (text.indexOf('Installing to ') === 0 ? 'Installing...' : text);
+              btn.textContent = display;
+              btn.style.pointerEvents = 'none';
+              btn.style.opacity = '0.75';
+            };
+            window._onUpdateFailed = function(err) {
+              _resetUpdateBtn();
+              showToast('Update failed: ' + (err || 'unknown'));
+            };
 
             if (data.pages.length) activePageId = data.pages[0].id;
             render();

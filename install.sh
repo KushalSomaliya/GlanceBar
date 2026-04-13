@@ -22,6 +22,27 @@ if ! command -v swift &>/dev/null; then
     exit 1
 fi
 
+# Detect existing installation so we replace in-place instead of creating a
+# duplicate somewhere else. Priority: running process > common locations.
+EXISTING=""
+RUNNING_LINE=$(ps -eo command 2>/dev/null | grep -E 'GlanceBar\.app/Contents/MacOS/GlanceBar' | head -1 || true)
+if [ -n "$RUNNING_LINE" ]; then
+    EXEC=$(echo "$RUNNING_LINE" | awk '{print $1}')
+    if [ -f "$EXEC" ]; then
+        EXISTING="${EXEC%/Contents/MacOS/GlanceBar}"
+    fi
+fi
+if [ -z "$EXISTING" ]; then
+    for p in "/Applications/$APP_NAME" "$HOME/Applications/$APP_NAME" "$HOME/Desktop/$APP_NAME" "$HOME/Downloads/$APP_NAME"; do
+        if [ -d "$p" ]; then EXISTING="$p"; break; fi
+    done
+fi
+if [ -n "$EXISTING" ]; then
+    APP_DIR=$(dirname "$EXISTING")
+    APP_NAME=$(basename "$EXISTING")
+    echo "→ Found existing install at $EXISTING — replacing in place"
+fi
+
 # Use existing clone or clone fresh
 if [ -d "$SRC_DIR/.git" ]; then
     echo "→ Source found, updating..."
@@ -41,7 +62,12 @@ swift build -c release 2>&1 | tail -3
 echo "→ Assembling app bundle..."
 bash build.sh 2>/dev/null
 
-# Install to ~/Applications
+# Stop any running instance before replacing the binary, otherwise `open`
+# below may just focus the old one instead of cold-starting the new build.
+pkill -f GlanceBar 2>/dev/null || true
+sleep 1
+
+# Install to detected location (or default ~/Applications for fresh installs)
 mkdir -p "$APP_DIR"
 rm -rf "$APP_DIR/$APP_NAME"
 cp -r "$SRC_DIR/$APP_NAME" "$APP_DIR/$APP_NAME"
