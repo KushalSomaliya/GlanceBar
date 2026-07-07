@@ -11,8 +11,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var preferencesManager: PreferencesManager!
     private var preferencesWindowController: NSWindowController?
     private var updateChecker: UpdateChecker!
+    private var updateManager: UpdateManager!
+    private var lastOfferedUpdateCommit: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // A stale copy left running (old install location, login item from a
+        // previous bundle ID) would fight this one over the hotkey and show
+        // an outdated widget bridge — kill it before doing anything else.
+        terminateOlderInstances()
+
         preferencesManager = PreferencesManager()
         ensureWidgetDirectory()
 
@@ -25,6 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             onEditWidget: { [weak self] in self?.editWidget() },
             onOpenFolder: { [weak self] in self?.openWidgetFolder() },
             onToggleDesktopPin: { [weak self] in self?.toggleDesktopPin() },
+            onCheckForUpdates: { [weak self] in self?.checkForUpdatesManually() },
             preferencesManager: preferencesManager
         )
 
@@ -42,13 +50,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         startFileWatcher()
 
-        // Check for updates
-        updateChecker = UpdateChecker()
-        updateChecker.onUpdateAvailable = { [weak self] version in
-            self?.panelController.showUpdateBanner(version: version)
-        }
-        updateChecker.checkForUpdates()
-        panelController.setOnPanelShow { [weak self] in self?.updateChecker.checkForUpdates() }
+        setupUpdateSystem()
 
         // Re-apply theme when macOS appearance changes (light/dark schedule)
         DistributedNotificationCenter.default().addObserver(
@@ -77,6 +79,94 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func togglePanel() {
         panelController.toggle()
+    }
+
+    // MARK: - Updates
+
+    private func setupUpdateSystem() {
+        updateChecker = UpdateChecker()
+        updateManager = UpdateManager()
+
+        let banner = panelController.updateBanner
+        banner.onUpdate = { [weak self] in
+            banner.showProgress("Starting update...")
+            self?.updateManager.runUpdate()
+        }
+        banner.onDismiss = { [weak self] in
+            self?.preferencesManager.dismissedUpdateCommit = self?.lastOfferedUpdateCommit
+        }
+        updateManager.onEvent = { [weak self] event in
+            guard let banner = self?.panelController.updateBanner else { return }
+            switch event {
+            case .status(let text): banner.showProgress(text)
+            case .upToDate: banner.showTransient("You're up to date \u{2713}")
+            case .failed(let error): banner.showError(error)
+            }
+        }
+        // Legacy widget HTML can still post 'runUpdate' from its in-page banner.
+        panelController.webViewController.onRunUpdate = { [weak self] in
+            self?.updateManager.runUpdate()
+        }
+
+        autoCheckForUpdates()
+        panelController.setOnPanelShow { [weak self] in self?.autoCheckForUpdates() }
+    }
+
+    private func autoCheckForUpdates() {
+        guard !updateManager.isRunning else { return }
+        updateChecker.checkForUpdates { [weak self] status in
+            guard let self, !self.updateManager.isRunning else { return }
+            guard case .updateAvailable(let commit, let summary) = status else { return }
+            if let commit, commit == self.preferencesManager.dismissedUpdateCommit { return }
+            self.lastOfferedUpdateCommit = commit
+            self.panelController.updateBanner.showUpdateAvailable(summary)
+        }
+    }
+
+    private func checkForUpdatesManually() {
+        panelController.show()
+        guard !updateManager.isRunning else { return }
+        preferencesManager.dismissedUpdateCommit = nil
+        updateChecker.checkForUpdates(force: true) { [weak self] status in
+            guard let self, !self.updateManager.isRunning else { return }
+            let banner = self.panelController.updateBanner
+            switch status {
+            case .upToDate:
+                banner.showTransient("GlanceBar is up to date \u{2713}")
+            case .updateAvailable(let commit, let summary):
+                self.lastOfferedUpdateCommit = commit
+                banner.showUpdateAvailable(summary)
+            case .checkFailed(let error):
+                banner.showTransient("Update check failed: \(error)")
+            }
+        }
+    }
+
+    /// Terminates other running GlanceBar instances (any bundle ID vintage)
+    /// that launched before this one.
+    private func terminateOlderInstances() {
+        let myPID = ProcessInfo.processInfo.processIdentifier
+        let myLaunchDate = NSRunningApplication.current.launchDate ?? Date()
+        let bundleIDs = [AppConstants.bundleIdentifier, AppConstants.legacyBundleIdentifier]
+
+        for app in NSWorkspace.shared.runningApplications {
+            guard app.processIdentifier != myPID else { continue }
+            let isGlanceBar = bundleIDs.contains(app.bundleIdentifier ?? "")
+                || app.executableURL?.lastPathComponent == AppConstants.appName
+            guard isGlanceBar else { continue }
+            // Only kill peers positively confirmed to be older — an unknown
+            // launchDate could be a just-registered newer instance. On an
+            // exact tie, the lower PID yields so a simultaneous dual-launch
+            // deterministically leaves one survivor.
+            guard let theirLaunchDate = app.launchDate else { continue }
+            if theirLaunchDate > myLaunchDate { continue }
+            if theirLaunchDate == myLaunchDate && app.processIdentifier > myPID { continue }
+
+            app.terminate()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                if !app.isTerminated { app.forceTerminate() }
+            }
+        }
     }
 
     private func showPreferences() {
@@ -123,20 +213,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func ensureWidgetDirectory() {
         let dir = AppConstants.defaultWidgetDirectory
-        let file = URL(fileURLWithPath: preferencesManager.widgetFilePath)
 
         if !FileManager.default.fileExists(atPath: dir.path) {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
 
-        if !FileManager.default.fileExists(atPath: file.path) {
-            copyDefaultWidget(to: file)
-        }
-    }
-
-    private func copyDefaultWidget(to destination: URL) {
-        let defaultHTML = DefaultWidget.html
-        try? defaultHTML.write(to: destination, atomically: true, encoding: .utf8)
+        // Creates the widget file on first launch, and refreshes it after app
+        // updates when it's still an unmodified app-generated default.
+        WidgetTemplate.ensureCurrent(at: preferencesManager.widgetFilePath)
     }
 
     private func startFileWatcher() {

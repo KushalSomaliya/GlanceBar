@@ -64,13 +64,18 @@ bash build.sh 2>/dev/null
 
 # Stop any running instance before replacing the binary, otherwise `open`
 # below may just focus the old one instead of cold-starting the new build.
-pkill -f GlanceBar 2>/dev/null || true
+pkill -f 'GlanceBar\.app/Contents/MacOS/GlanceBar' 2>/dev/null || true
 sleep 1
 
 # Install to detected location (or default ~/Applications for fresh installs)
 mkdir -p "$APP_DIR"
 rm -rf "$APP_DIR/$APP_NAME"
-cp -r "$SRC_DIR/$APP_NAME" "$APP_DIR/$APP_NAME"
+cp -r "$SRC_DIR/GlanceBar.app" "$APP_DIR/$APP_NAME"
+
+# Re-sign at the final install path and strip quarantine — Tahoe's Gatekeeper
+# shows a bogus "damaged" dialog for ad-hoc bundles with stale provenance.
+xattr -rd com.apple.quarantine "$APP_DIR/$APP_NAME" 2>/dev/null || true
+codesign --force --deep --sign - "$APP_DIR/$APP_NAME" 2>/dev/null || true
 echo "→ Installed to $APP_DIR/$APP_NAME"
 
 # Add alias if not present

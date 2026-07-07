@@ -4,7 +4,8 @@ import WebKit
 class PanelController {
     private let panel: NSPanel
     private let visualEffectView: NSVisualEffectView
-    private let webViewController: WebViewController
+    let webViewController: WebViewController
+    let updateBanner = UpdateBannerView()
     private let preferencesManager: PreferencesManager
     private var clickOutsideMonitor: Any?
     private var escapeMonitor: Any?
@@ -51,6 +52,15 @@ class PanelController {
             webView.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor),
         ])
 
+        updateBanner.translatesAutoresizingMaskIntoConstraints = false
+        visualEffectView.addSubview(updateBanner)
+        NSLayoutConstraint.activate([
+            updateBanner.topAnchor.constraint(equalTo: visualEffectView.topAnchor, constant: 10),
+            updateBanner.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor, constant: 10),
+            updateBanner.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor, constant: -10),
+            updateBanner.heightAnchor.constraint(equalToConstant: 40),
+        ])
+
         webViewController.loadWidget()
         updateVisualEffectAppearance()
 
@@ -94,11 +104,11 @@ class PanelController {
         onPanelShow = handler
     }
 
-    func showUpdateBanner(version: String) {
-        let escaped = version.replacingOccurrences(of: "'", with: "\\'")
-        webViewController.webView.evaluateJavaScript(
-            "if(window.showUpdateBanner) showUpdateBanner('\(escaped)');"
-        ) { _, _ in }
+    /// Shows the panel if it isn't visible (used by "Check for Updates…" so
+    /// the banner has somewhere to appear).
+    func show() {
+        guard !isVisible else { return }
+        toggle()
     }
 
     func applyTheme() {

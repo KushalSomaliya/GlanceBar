@@ -285,6 +285,43 @@ enum DefaultWidget {
             animation: actionSpin 0.7s linear infinite;
           }
           .action-command-field { font-family: 'SF Mono', Menlo, monospace !important; font-size: 11px !important; }
+
+          .value-go {
+            display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+            position: relative;
+            min-width: 58px; height: 20px;
+            padding: 0 10px;
+            font-size: 10px; font-weight: 600; letter-spacing: 0.05em;
+            color: #AF52DE;
+            background: rgba(175, 82, 222, 0.12);
+            border: 1px solid rgba(175, 82, 222, 0.32);
+            border-radius: 999px;
+            transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease, transform 0.08s ease;
+            user-select: none; -webkit-user-select: none;
+          }
+          .value-go .go-glyph { font-size: 8px; line-height: 1; transform: translateY(-0.5px); }
+          .row-launch:hover .value-go { background: rgba(175, 82, 222, 0.24); border-color: rgba(175, 82, 222, 0.55); }
+          .row-launch:active .value-go { transform: scale(0.95); }
+          .row-launch.running { pointer-events: none; }
+          .row-launch.running .value-go { color: transparent; background: rgba(175, 82, 222, 0.08); }
+          .row-launch.running .value-go::after {
+            content: ''; position: absolute;
+            width: 11px; height: 11px;
+            border: 1.5px solid rgba(175, 82, 222, 0.3);
+            border-top-color: #AF52DE;
+            border-radius: 50%;
+            animation: actionSpin 0.7s linear infinite;
+          }
+          .value-go.fired {
+            color: var(--success) !important;
+            background: rgba(52, 199, 89, 0.18) !important;
+            border-color: rgba(52, 199, 89, 0.55) !important;
+          }
+          .value-go.failed {
+            color: var(--danger, #ff453a) !important;
+            background: rgba(255, 69, 58, 0.18) !important;
+            border-color: rgba(255, 69, 58, 0.55) !important;
+          }
           .value {
             font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
             color: var(--text-muted); transition: color 0.08s;
@@ -478,46 +515,36 @@ enum DefaultWidget {
             pointer-events: none; z-index: 1200;
           }
           .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-          .update-banner {
-            display: none; margin-bottom: 10px;
-            background: linear-gradient(135deg, rgba(10,132,255,0.15), rgba(94,92,230,0.15));
-            border: 1px solid rgba(10,132,255,0.3);
-            border-radius: 10px; padding: 10px 14px;
-            animation: fadeSlideIn 0.3s ease;
-          }
-          .update-banner.show { display: flex; align-items: center; gap: 10px; }
-          .update-banner-text { flex: 1; font-size: 12px; color: var(--text); }
-          .update-banner-text strong { color: var(--accent); }
-          .update-banner-btn {
-            padding: 5px 14px; border: none; border-radius: 6px;
-            background: var(--accent); color: white;
-            font-size: 11px; font-weight: 600; cursor: pointer;
-            font-family: inherit; transition: opacity 0.15s;
-            min-width: 78px; max-width: 140px;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-          }
-          .update-banner-btn:hover { opacity: 0.85; }
-          .update-banner-close {
-            width: 18px; height: 18px; border: none; background: none;
-            color: var(--text-dim); font-size: 14px; cursor: pointer;
-            border-radius: 4px; display: flex; align-items: center; justify-content: center;
-          }
-          .update-banner-close:hover { background: var(--hover-bg); color: var(--text-muted); }
         </style>
         </head>
         <body>
-          <div class="update-banner" id="updateBanner">
-            <div class="update-banner-text">Update <strong id="updateVersion"></strong> available</div>
-            <button class="update-banner-btn" onclick="runUpdate()">Update</button>
-            <button class="update-banner-close" onclick="dismissUpdate()">&times;</button>
-          </div>
           <div id="app"></div>
           <div class="context-menu" id="contextMenu"></div>
           <div class="confirm-overlay" id="confirmOverlay"><div class="confirm-box" id="confirmBox"></div></div>
           <div class="toast" id="toast"></div>
 
           <script>
+            // Self-heal the bridge: window.GlanceBar is normally injected by
+            // the app as a WKUserScript, but the native message handler is
+            // registered independently — if the injected object is missing or
+            // incomplete (older app binary), rebuild it on top of postMessage
+            // so copy/save/actions keep working instead of dying silently.
+            (function() {
+              var mh = window.webkit && webkit.messageHandlers && webkit.messageHandlers.glancebar;
+              if (!mh) return;
+              function post(msg) { mh.postMessage(msg); }
+              var shim = {
+                copy: function(text) { post({ action: 'copy', text: text }); },
+                openURL: function(url) { post({ action: 'openURL', url: url }); },
+                saveData: function(data) { post({ action: 'saveData', data: JSON.stringify(data) }); },
+                exportData: function() { post({ action: 'exportData' }); },
+                importData: function() { post({ action: 'importData' }); },
+                runAction: function(id, command, timeout) { post({ action: 'runAction', id: id, command: command, timeout: timeout || 30 }); }
+              };
+              if (!window.GlanceBar) { window.GlanceBar = shim; return; }
+              for (var k in shim) { if (!window.GlanceBar[k]) window.GlanceBar[k] = shim[k]; }
+            })();
+
             var DEFAULT_DATA = {
               pages: [
                 {
@@ -606,6 +633,13 @@ enum DefaultWidget {
                 data = saved;
               }
               data.pages.forEach(function(p){ if (!p.recents) p.recents = []; });
+              // Legacy rename: 'trigger' → 'launch'
+              data.pages.forEach(function(p){ p.cards.forEach(function(c){
+                (function walk(secs){ if(!secs) return; secs.forEach(function(s){
+                  if (s.items) s.items.forEach(function(i){ if (i.type === 'trigger') i.type = 'launch'; });
+                  walk(s.sections);
+                }); })(c.sections);
+              }); });
               activePageId = data.pages[0] ? data.pages[0].id : null;
               render();
             };
@@ -743,6 +777,10 @@ enum DefaultWidget {
                 '<input id="act_label_' + section.id + '" placeholder="Action label">' +
                 '<textarea id="act_command_' + section.id + '" class="action-command-field" placeholder="Shell command" rows="1"></textarea>' +
                 '</div>' +
+                '<div class="inline-form" id="launchForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="launch">' +
+                '<input id="lnc_label_' + section.id + '" placeholder="Launch label">' +
+                '<textarea id="lnc_command_' + section.id + '" class="action-command-field" placeholder="~/.glancebar/scripts/your-script.sh" rows="1"></textarea>' +
+                '</div>' +
                 childSections.map(function(cs) { return renderSection(cardId, cs, hideValues, isSel, depth + 1); }).join('') +
                 '<div class="card-form" id="newSubsectionForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="subsection">' +
                 '<div class="form-row"><input id="newSubsectionTitle_' + section.id + '" placeholder="New subsection name"></div></div>' +
@@ -774,12 +812,37 @@ enum DefaultWidget {
                 labelHtml + valHtml + '</div>';
             }
 
+            function renderLaunchRow(cardId, sectionId, item, isSel, isRecent, recentSuffix) {
+              var chk = isSel && selected[item.id];
+              var srcHtml = recentSuffix ? '<span class="recent-source">' + esc(recentSuffix) + '</span>' : '';
+              var labelHtml = '<span class="label">' + esc(item.label) + srcHtml + '</span>';
+              var valHtml = '<span class="value-go"><span class="go-glyph">\u25B6</span>GO</span>';
+              var runningCls = _runningActions[item.id] ? ' running' : '';
+
+              if (isRecent) {
+                return '<div class="row row-launch recent-row' + runningCls + '" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
+                  'onclick="runLaunchById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',true)">' +
+                  labelHtml + valHtml + '</div>';
+              }
+              if (isSel) {
+                return '<div class="row row-launch' + runningCls + '" onclick="toggleSelectItem(\'' + item.id + '\')">' +
+                  '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
+                  labelHtml + valHtml + '</div>';
+              }
+              return '<div class="row row-launch' + runningCls + '" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
+                'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
+                'onclick="runLaunchById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',false)" ' +
+                'oncontextmenu="showEntryMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
+                '<span class="drag-handle">\u2630</span>' +
+                labelHtml + valHtml + '</div>';
+            }
+
             function renderRow(cardId, sectionId, item, hideValues, isSel, idx, isRecent, recentSuffix) {
-              // Inline editing mode (works for both static and action items)
+              // Inline editing mode (works for static, action, and launch items)
               if (editingItemId === item.id) {
-                var content = item.type === 'action' ? (item.command || '') : (item.value || '');
+                var content = (item.type === 'action' || item.type === 'launch') ? (item.command || '') : (item.value || '');
                 var rowsN = Math.min(content.split('\n').length, 4);
-                var fieldCls = item.type === 'action' ? ' class="action-command-field"' : '';
+                var fieldCls = (item.type === 'action' || item.type === 'launch') ? ' class="action-command-field"' : '';
                 return '<div class="row-editing" data-edit-card="' + cardId + '" data-edit-section="' + sectionId + '" data-edit-item="' + item.id + '">' +
                   '<input id="edit_label_' + item.id + '" value="' + esc(item.label) + '">' +
                   '<textarea id="edit_value_' + item.id + '" rows="' + rowsN + '"' + fieldCls + '>' + esc(content) + '</textarea>' +
@@ -788,6 +851,9 @@ enum DefaultWidget {
 
               if (item.type === 'action') {
                 return renderActionRow(cardId, sectionId, item, isSel, isRecent, recentSuffix);
+              }
+              if (item.type === 'launch') {
+                return renderLaunchRow(cardId, sectionId, item, isSel, isRecent, recentSuffix);
               }
 
               var chk = isSel && selected[item.id];
@@ -908,12 +974,32 @@ enum DefaultWidget {
               if (payload && payload.ok) p.resolve(payload.stdout || '');
               else p.reject(payload && payload.error ? payload.error : 'Action failed');
             };
+            var ACTION_TIMEOUT_SECS = 30;
             function runActionPromise(command) {
               return new Promise(function(resolve, reject) {
                 var id = 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
                 _pendingActions[id] = { resolve: resolve, reject: reject };
-                if (window.GlanceBar && GlanceBar.runAction) GlanceBar.runAction(id, command, 30);
-                else { delete _pendingActions[id]; reject('Bridge unavailable'); }
+                function fail(msg) { delete _pendingActions[id]; reject(msg); }
+                try {
+                  if (window.GlanceBar && GlanceBar.runAction) {
+                    GlanceBar.runAction(id, command, ACTION_TIMEOUT_SECS);
+                  } else if (window.webkit && webkit.messageHandlers && webkit.messageHandlers.glancebar) {
+                    // Injected bridge object missing but the native handler is
+                    // still registered — post directly.
+                    webkit.messageHandlers.glancebar.postMessage({ action: 'runAction', id: id, command: command, timeout: ACTION_TIMEOUT_SECS });
+                  } else {
+                    fail('Bridge unavailable — quit and reopen GlanceBar');
+                    return;
+                  }
+                } catch (e) {
+                  fail('Bridge error — quit and reopen GlanceBar');
+                  return;
+                }
+                // Watchdog: an old app version that doesn't understand
+                // runAction would otherwise leave this pending forever.
+                setTimeout(function() {
+                  if (_pendingActions[id]) fail('No response from GlanceBar — update or restart the app');
+                }, (ACTION_TIMEOUT_SECS + 5) * 1000);
               });
             }
             function runActionById(row, cardId, sectionId, itemId, fromRecents) {
@@ -946,6 +1032,49 @@ enum DefaultWidget {
                 trackRecent(cardId, sectionId, itemId, fromRecents);
               }).catch(function(err) {
                 showToast('Action failed: ' + (err || 'unknown'));
+              }).finally(function() {
+                delete _runningActions[itemId];
+                document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){ el.classList.remove('running'); });
+              });
+            }
+
+            // Launch: fire-and-forget. Runs the command, ignores stdout, shows DONE / FAIL feedback.
+            function runLaunchById(row, cardId, sectionId, itemId, fromRecents) {
+              if (selectMode) { toggleSelectItem(itemId); return; }
+              if (_runningActions[itemId]) return;
+              var sec = findSectionInCard(cardId, sectionId);
+              if (!sec) return;
+              var item = sec.items.find(function(i){ return i.id === itemId; });
+              if (!item || item.type !== 'launch' || !item.command) return;
+
+              _runningActions[itemId] = true;
+              document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){ el.classList.add('running'); });
+
+              runActionPromise(item.command).then(function() {
+                document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){
+                  var v = el.querySelector('.value-go');
+                  if (!v) return;
+                  v.classList.add('fired');
+                  randomEffect()(v, 'DONE', 300, function(){
+                    setTimeout(function(){
+                      v.classList.remove('fired');
+                      v.innerHTML = '<span class="go-glyph">\u25B6</span>GO';
+                    }, 900);
+                  });
+                });
+                trackRecent(cardId, sectionId, itemId, fromRecents);
+              }).catch(function(err) {
+                document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){
+                  var v = el.querySelector('.value-go');
+                  if (!v) return;
+                  v.classList.add('failed');
+                  v.innerHTML = 'FAIL';
+                  setTimeout(function(){
+                    v.classList.remove('failed');
+                    v.innerHTML = '<span class="go-glyph">\u25B6</span>GO';
+                  }, 1400);
+                });
+                showToast('Launch failed: ' + (err || 'unknown'));
               }).finally(function() {
                 delete _runningActions[itemId];
                 document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){ el.classList.remove('running'); });
@@ -1177,6 +1306,27 @@ enum DefaultWidget {
               var s = findSectionInCard(cid, sid);
               if (s) { s.items.push({id:uid(),type:'action',label:l,command:c}); save(); render(); }
             }
+            function showAddLaunchForm(cid, sid) {
+              var form = document.getElementById('launchForm_'+sid);
+              form.classList.add('show');
+              setTimeout(function(){
+                var labelEl = document.getElementById('lnc_label_'+sid);
+                var cmdEl = document.getElementById('lnc_command_'+sid);
+                labelEl.focus();
+                installFormBlur([labelEl, cmdEl], function(){ submitLaunch(cid, sid); }, function(){ hideAddLaunchForm(sid); });
+              },50);
+            }
+            function hideAddLaunchForm(sid) {
+              var form = document.getElementById('launchForm_'+sid);
+              if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input,textarea'); inputs.forEach(function(i){i.value='';}); }
+            }
+            function submitLaunch(cid, sid) {
+              var l = document.getElementById('lnc_label_'+sid).value.trim();
+              var c = document.getElementById('lnc_command_'+sid).value.trim();
+              if (!l||!c) return;
+              var s = findSectionInCard(cid, sid);
+              if (s) { s.items.push({id:uid(),type:'launch',label:l,command:c}); save(); render(); }
+            }
             function showNewSectionForm(cid) {
               hideContextMenu();
               document.getElementById('newSectionForm_'+cid).classList.add('show');
@@ -1241,7 +1391,7 @@ enum DefaultWidget {
                   var item = sec.items.find(function(i){return i.id===iid;});
                   if (item) {
                     item.label = l;
-                    if (item.type === 'action') item.command = v;
+                    if (item.type === 'action' || item.type === 'launch') item.command = v;
                     else item.value = v;
                   }
                 }
@@ -1328,6 +1478,7 @@ enum DefaultWidget {
                 '<div class="context-menu-item" onclick="startEditSection(\''+cid+'\',\''+sid+'\')">Rename Section</div>' +
                 '<div class="context-menu-item" onclick="showAddEntryForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Entry</div>' +
                 '<div class="context-menu-item" onclick="showAddActionForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Action</div>' +
+                '<div class="context-menu-item" onclick="showAddLaunchForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Launch</div>' +
                 '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>';
               m.style.left = Math.min(e.clientX, window.innerWidth-170)+'px';
               m.style.top = (e.clientY+4)+'px';
@@ -1341,6 +1492,7 @@ enum DefaultWidget {
               m.innerHTML =
                 '<div class="context-menu-item" onclick="showAddEntryForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Entry</div>' +
                 '<div class="context-menu-item" onclick="showAddActionForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Action</div>' +
+                '<div class="context-menu-item" onclick="showAddLaunchForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Launch</div>' +
                 '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>';
               var r = e.target.getBoundingClientRect();
               m.style.left = Math.min(r.right - 150, window.innerWidth-160)+'px';
@@ -1514,47 +1666,6 @@ enum DefaultWidget {
               }
               if (e.key==='Escape') { if(editingItemId||editingSectionId){cancelEdit();return;} if(selectMode){exitSelectMode();return;} hideConfirm(); }
             });
-
-            // UPDATE BANNER
-            window.showUpdateBanner = function(version) {
-              document.getElementById('updateVersion').textContent = version;
-              document.getElementById('updateBanner').classList.add('show');
-            };
-            function dismissUpdate() { document.getElementById('updateBanner').classList.remove('show'); }
-            function runUpdate() {
-              var btn = document.querySelector('.update-banner-btn');
-              btn.textContent = 'Updating...';
-              btn.style.pointerEvents = 'none';
-              btn.style.opacity = '0.6';
-              if (window.GlanceBar) window.webkit.messageHandlers.glancebar.postMessage({ action: 'runUpdate' });
-            }
-            function _resetUpdateBtn() {
-              var btn = document.querySelector('.update-banner-btn');
-              if (!btn) return;
-              btn.textContent = 'Update';
-              btn.style.pointerEvents = '';
-              btn.style.opacity = '';
-            }
-            window._onUpdateStatus = function(text) {
-              var btn = document.querySelector('.update-banner-btn');
-              if (!btn || !text) return;
-              // Map verbose shell messages to short pill-friendly labels
-              var map = {
-                'Checking for updates...': 'Checking...',
-                'Update available! Pulling changes...': 'Pulling...',
-                'Stopping GlanceBar...': 'Stopping...',
-                'Assembling app bundle...': 'Assembling...',
-                'Purging old bundle ID state...': 'Cleaning up...'
-              };
-              var display = map[text] || (text.indexOf('Installing to ') === 0 ? 'Installing...' : text);
-              btn.textContent = display;
-              btn.style.pointerEvents = 'none';
-              btn.style.opacity = '0.75';
-            };
-            window._onUpdateFailed = function(err) {
-              _resetUpdateBtn();
-              showToast('Update failed: ' + (err || 'unknown'));
-            };
 
             if (data.pages.length) activePageId = data.pages[0].id;
             render();

@@ -14,6 +14,14 @@ class PreferencesManager {
         static let theme = "theme"
         static let shortcutKey = "shortcutKey"
         static let shortcutModifiers = "shortcutModifiers"
+        static let dismissedUpdateCommit = "dismissedUpdateCommit"
+    }
+
+    /// Remote commit the user dismissed the update banner for — that exact
+    /// update won't be offered again, but a newer one will.
+    var dismissedUpdateCommit: String? {
+        get { defaults.string(forKey: Keys.dismissedUpdateCommit) }
+        set { defaults.set(newValue, forKey: Keys.dismissedUpdateCommit) }
     }
 
     var hotCorner: ScreenCorner {

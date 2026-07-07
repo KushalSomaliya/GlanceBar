@@ -45,11 +45,25 @@ A lightweight macOS menu bar app that provides a custom widget sidebar panel wit
 | `Sources/GlanceBar/PreferencesManager.swift`    | UserDefaults wrapper for all app settings                                                     |
 | `Sources/GlanceBar/PreferencesWindow.swift`     | SwiftUI preferences UI with theme picker, shortcut recorder, hot corner selector              |
 | `Sources/GlanceBar/DefaultWidget.swift`         | Default HTML/CSS/JS widget template (embedded as Swift string literal)                        |
+| `Sources/GlanceBar/WidgetTemplate.swift`        | Regenerates `~/.glancebar/index.html` after updates when it's an unmodified default (hash-gated) |
+| `Sources/GlanceBar/UpdateChecker.swift`         | Update detection: build-commit vs origin/main via GitHub compare API (tag fallback)           |
+| `Sources/GlanceBar/UpdateManager.swift`         | Runs `~/.glancebar-src/update.sh` (bootstrap-clones if missing), streams progress             |
+| `Sources/GlanceBar/UpdateBannerView.swift`      | Native AppKit update banner at the top of the panel (independent of widget HTML)              |
 | `Sources/GlanceBar/LaunchAtLoginManager.swift`  | SMAppService login item management                                                            |
 | `Sources/GlanceBar/DesktopPinManager.swift`     | Desktop window level constants                                                                |
-| `Sources/GlanceBar/Constants.swift`             | App-wide constants and ScreenCorner enum                                                      |
+| `Sources/GlanceBar/Constants.swift`             | App-wide constants, ScreenCorner enum, build-commit stamp accessor                            |
 
 ## Key Technical Decisions & Lessons Learned
+
+### Update System (v1.1.3 redesign)
+
+- **Source of truth is the git commit, not tags/version strings.** `build.sh` stamps `GlanceBarBuildCommit` (HEAD sha) into the bundle's Info.plist; `UpdateChecker` compares it against `origin/main` via the GitHub compare API (`ahead`/`diverged` ⇒ update, `identical`/`behind` ⇒ current, HTTP 404 ⇒ unpushed dev build ⇒ stay silent). Unstamped pre-1.1.3 binaries fall back to semver-sorted tags vs `AppConstants.version`.
+- **The update banner is native AppKit** (`UpdateBannerView` in the panel), NOT widget HTML. The old in-page banner silently no-oped for users whose `~/.glancebar/index.html` predated it — that file is generated once and user-editable, so UI the app depends on must never live there.
+- **`update.sh` must build BEFORE killing the app.** The app streams the script's stdout through a pipe; once the app dies, the next `echo` gets SIGPIPE and kills the script mid-update (this is how the old updater left repos pulled but apps stale). The script also `exec >/dev/null 2>&1` right before `pkill` when app-spawned, and is wrapped in `main()` so bash parses the whole file before `git pull` replaces it on disk.
+- **`update.sh` gates on BOTH the checkout sha AND the installed app's stamp** — a current checkout with a stale installed app rebuilds instead of reporting "already up to date".
+- **Widget HTML refresh is hash-gated** (`WidgetTemplate`): the file is only regenerated when its SHA-256 matches the sidecar (`~/.glancebar/.default-widget-sha256`) or a known historical default hash; a backup (`index.html.bak`) is written first. User-customized files are never touched.
+- **Single-instance guard**: `AppDelegate.terminateOlderInstances()` kills earlier-launched GlanceBar instances (both bundle IDs) — a stale copy owning the panel with a newer HTML file was the main cause of "Bridge unavailable" errors.
+- The widget JS also self-heals: if `window.GlanceBar` is missing/incomplete, it rebuilds the bridge on `webkit.messageHandlers.glancebar`, and action calls have a watchdog timeout instead of hanging forever.
 
 ### Global Hotkey (Carbon API)
 

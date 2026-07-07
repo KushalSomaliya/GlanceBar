@@ -7,6 +7,7 @@ class StatusBarController {
     private let onEditWidget: () -> Void
     private let onOpenFolder: () -> Void
     private let onToggleDesktopPin: () -> Void
+    private let onCheckForUpdates: () -> Void
     private let preferencesManager: PreferencesManager
     private var pinMenuItem: NSMenuItem!
 
@@ -16,6 +17,7 @@ class StatusBarController {
         onEditWidget: @escaping () -> Void,
         onOpenFolder: @escaping () -> Void,
         onToggleDesktopPin: @escaping () -> Void,
+        onCheckForUpdates: @escaping () -> Void,
         preferencesManager: PreferencesManager
     ) {
         self.onToggle = onToggle
@@ -23,6 +25,7 @@ class StatusBarController {
         self.onEditWidget = onEditWidget
         self.onOpenFolder = onOpenFolder
         self.onToggleDesktopPin = onToggleDesktopPin
+        self.onCheckForUpdates = onCheckForUpdates
         self.preferencesManager = preferencesManager
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -77,6 +80,16 @@ class StatusBarController {
 
         menu.addItem(.separator())
 
+        let versionItem = menu.addItem(
+            withTitle: "GlanceBar v\(AppConstants.version)", action: nil, keyEquivalent: ""
+        )
+        versionItem.isEnabled = false
+
+        menu.addItem(withTitle: "Check for Updates...", action: #selector(menuCheckForUpdates), keyEquivalent: "")
+            .target = self
+
+        menu.addItem(.separator())
+
         menu.addItem(withTitle: "Quit GlanceBar", action: #selector(menuQuit), keyEquivalent: "q")
             .target = self
 
@@ -94,5 +107,6 @@ class StatusBarController {
     @objc private func menuEditWidget() { onEditWidget() }
     @objc private func menuOpenFolder() { onOpenFolder() }
     @objc private func menuPreferences() { onPreferences() }
+    @objc private func menuCheckForUpdates() { onCheckForUpdates() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 }

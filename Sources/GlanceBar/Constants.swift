@@ -3,8 +3,17 @@ import Foundation
 enum AppConstants {
     static let appName = "GlanceBar"
     static let bundleIdentifier = "dev.kushal.glancebar"
-    static let version = "1.1.2"
+    static let legacyBundleIdentifier = "com.kushal.glancebar"
+    static let version = "1.1.3"
     static let githubRepo = "KushalSomaliya/GlanceBar"
+
+    /// Commit the running binary was built from, stamped into Info.plist by
+    /// build.sh. Nil for raw `swift run` binaries that have no bundle.
+    static var buildCommit: String? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "GlanceBarBuildCommit") as? String else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed.isEmpty || trimmed == "unknown") ? nil : trimmed
+    }
 
     static let defaultWidgetDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".glancebar")
