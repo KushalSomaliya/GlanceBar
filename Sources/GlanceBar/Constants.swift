@@ -4,7 +4,7 @@ enum AppConstants {
     static let appName = "GlanceBar"
     static let bundleIdentifier = "dev.kushal.glancebar"
     static let legacyBundleIdentifier = "com.kushal.glancebar"
-    static let version = "1.1.3"
+    static let version = "1.1.4"
     static let githubRepo = "KushalSomaliya/GlanceBar"
 
     /// Commit the running binary was built from, stamped into Info.plist by

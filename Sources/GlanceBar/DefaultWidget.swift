@@ -77,6 +77,7 @@ enum DefaultWidget {
               --handle-hover: rgba(0,0,0,0.55);
               --footer-text: rgba(0,0,0,0.4);
               --footer-hover: rgba(0,0,0,0.6);
+              --danger-text: #d70015;
             }
           }
 
@@ -111,6 +112,7 @@ enum DefaultWidget {
             --handle-hover: rgba(0,0,0,0.55);
             --footer-text: rgba(0,0,0,0.4);
             --footer-hover: rgba(0,0,0,0.6);
+            --danger-text: #d70015;
           }
 
           body {
@@ -515,9 +517,32 @@ enum DefaultWidget {
             pointer-events: none; z-index: 1200;
           }
           .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+          .toast.toast-error { background: rgba(255, 59, 48, 0.95); }
+          .search-wrap { position: relative; display: flex; align-items: center; margin-bottom: 10px; }
+          .search-icon { position: absolute; left: 9px; font-size: 13px; color: var(--text-dim); pointer-events: none; }
+          .search-wrap input {
+            flex: 1; background: var(--input-bg); border: 1px solid var(--input-border);
+            border-radius: 8px; padding: 6px 24px 6px 26px; font-size: 12px; color: var(--text);
+            outline: none; font-family: inherit; -webkit-user-select: text; user-select: text;
+          }
+          .search-wrap input:focus { border-color: var(--accent); background: var(--input-focus-bg); }
+          .search-wrap input::placeholder { color: var(--text-dim); }
+          .search-clear {
+            position: absolute; right: 5px; width: 18px; height: 18px; border: none; background: none;
+            color: var(--text-dim); font-size: 10px; cursor: pointer; border-radius: 4px;
+            display: none; align-items: center; justify-content: center;
+          }
+          .search-clear:hover { background: var(--hover-bg); color: var(--text-muted); }
+          .search-wrap.has-query .search-clear { display: flex; }
+          .search-empty { text-align: center; color: var(--text-dim); font-size: 12px; padding: 20px 0 8px; }
         </style>
         </head>
         <body>
+          <div class="search-wrap" id="searchWrap">
+            <span class="search-icon">&#8981;</span>
+            <input id="searchInput" placeholder="Search" autocomplete="off" autocorrect="off" spellcheck="false">
+            <button class="search-clear" id="searchClear" tabindex="-1">&#10005;</button>
+          </div>
           <div id="app"></div>
           <div class="context-menu" id="contextMenu"></div>
           <div class="confirm-overlay" id="confirmOverlay"><div class="confirm-box" id="confirmBox"></div></div>
@@ -576,6 +601,7 @@ enum DefaultWidget {
             var activePageId = null;
             var selectMode = false, selectCardId = null, selected = {};
             var editingItemId = null, editingSectionId = null;
+            var searchQuery = '';
 
             // Drag state
             var dragType = null, dragCardId = null, dragSectionId = null, dragItemId = null;
@@ -641,37 +667,88 @@ enum DefaultWidget {
                 }); })(c.sections);
               }); });
               activePageId = data.pages[0] ? data.pages[0].id : null;
+              window._dataLoaded = true;
               render();
             };
             function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-            function showToast(msg) { var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); }, 1500); }
+            // For HTML attribute values (value="...") — esc() doesn't cover quotes
+            function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+            var _toastTimer = null;
+            function showToast(msg, kind) {
+              var t = document.getElementById('toast');
+              t.textContent = msg;
+              t.classList.toggle('toast-error', kind === 'error');
+              t.classList.add('show');
+              if (_toastTimer) clearTimeout(_toastTimer);
+              _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, kind === 'error' ? 2500 : 1500);
+            }
+
+            // ===== SEARCH =====
+            function searchQ() { return searchQuery.trim().toLowerCase(); }
+            function itemMatches(item, q) {
+              if ((item.label || '').toLowerCase().indexOf(q) !== -1) return true;
+              var v = (item.type === 'action' || item.type === 'launch') ? item.command : item.value;
+              return !!v && v.toLowerCase().indexOf(q) !== -1;
+            }
+            function sectionMatchCount(s, q) {
+              var n = (s.items || []).filter(function(i){ return itemMatches(i, q); }).length;
+              (s.sections || []).forEach(function(cs){ n += sectionMatchCount(cs, q); });
+              return n;
+            }
+            function cardMatchCount(card, q) {
+              var n = 0;
+              card.sections.forEach(function(s){ n += sectionMatchCount(s, q); });
+              return n;
+            }
+            function clearSearch() {
+              commitPendingEdit();
+              searchQuery = '';
+              var input = document.getElementById('searchInput');
+              if (input) input.value = '';
+              var wrap = document.getElementById('searchWrap');
+              if (wrap) wrap.classList.remove('has-query');
+              render();
+            }
+            window._focusSearch = function() {
+              var input = document.getElementById('searchInput');
+              if (input) { input.focus(); input.select(); }
+            };
 
             // ===== RENDER =====
             function render() {
               if (!activePageId && data.pages.length) activePageId = data.pages[0].id;
               var page = activePage();
               var app = document.getElementById('app');
+              var q = searchQ();
               var html = renderTabBar();
               if (page) {
-                html += '<div class="card recents-card" id="recents-mount" data-card="__recents__" style="display:none">' +
-                  '<div class="card-header"><div class="card-title">Recently Copied</div></div>' +
-                  '<div id="recents-rows"></div></div>';
-                html += page.cards.map(function(card) { return renderCard(card); }).join('');
+                if (!q) {
+                  html += '<div class="card recents-card" id="recents-mount" data-card="__recents__" style="display:none">' +
+                    '<div class="card-header" oncontextmenu="showRecentsCardMenu(event)"><div class="card-title">Recently Copied</div></div>' +
+                    '<div id="recents-rows"></div></div>';
+                }
+                var visibleCards = q ? page.cards.filter(function(c){ return cardMatchCount(c, q) > 0; }) : page.cards;
+                html += visibleCards.map(function(card) { return renderCard(card); }).join('');
+                if (q && !visibleCards.length) html += '<div class="search-empty">No matches</div>';
               }
               html += '<div class="card-form" id="newCardForm" data-form-type="card">' +
                 '<div class="form-row"><input id="newCardTitle" placeholder="Card name (e.g. Passwords)"></div>' +
                 '<div class="form-row"><input id="newCardSection" placeholder="First section name (e.g. Email)"></div>' +
                 '</div>';
-              html += '<button class="add-card-btn" onclick="showNewCardForm()">+ Add Card</button>';
+              if (!q) {
+                html += '<button class="add-card-btn" onclick="showNewCardForm()">+ Add Card</button>';
+              }
               html += '<div class="footer-links">' +
                 '<button class="footer-link" onclick="GlanceBar.exportData()">Export</button>' +
                 '<span style="color:var(--footer-text)">|</span>' +
                 '<button class="footer-link" onclick="GlanceBar.importData()">Import</button></div>';
               if (selectMode) {
                 var count = Object.keys(selected).length;
+                var disabledStyle = count===0?'style="opacity:0.4;pointer-events:none"':'';
                 html += '<div class="select-bar"><span class="select-bar-text"><span class="select-bar-count">' + count + '</span> selected</span>' +
                   '<button class="btn btn-secondary" onclick="exitSelectMode()">Cancel</button>' +
-                  '<button class="btn btn-danger" onclick="confirmDeleteSelected()" ' + (count===0?'style="opacity:0.4;pointer-events:none"':'') + '>Delete</button></div>';
+                  '<button class="btn btn-secondary" onclick="copySelected()" ' + disabledStyle + '>Copy</button>' +
+                  '<button class="btn btn-danger" onclick="confirmDeleteSelected()" ' + disabledStyle + '>Delete</button></div>';
               }
               app.innerHTML = html;
               updateRecentsMount();
@@ -738,25 +815,29 @@ enum DefaultWidget {
 
             function renderCard(card) {
               var isSel = selectMode && selectCardId === card.id;
+              var q = searchQ();
+              var sections = q ? card.sections.filter(function(s){ return sectionMatchCount(s, q) > 0; }) : card.sections;
               return '<div class="card" data-card="' + card.id + '">' +
                 '<div class="card-header"><div class="card-title">' + esc(card.title) + '</div>' +
                 '<button class="card-menu-btn" onclick="showCardMenu(event,\'' + card.id + '\')">\u2026</button></div>' +
-                card.sections.map(function(s) { return renderSection(card.id, s, card.hideValues, isSel); }).join('') +
+                sections.map(function(s) { return renderSection(card.id, s, card.hideValues, isSel); }).join('') +
                 '<div class="card-form" id="newSectionForm_' + card.id + '" data-form-card="' + card.id + '" data-form-type="section">' +
                 '<div class="form-row"><input id="newSectionTitle_' + card.id + '" placeholder="New section name"></div></div>' +
                 '<div class="card-form" id="renameForm_' + card.id + '" data-form-card="' + card.id + '" data-form-type="rename">' +
-                '<div class="form-row"><input id="renameInput_' + card.id + '" placeholder="New name" value="' + esc(card.title) + '"></div></div></div>';
+                '<div class="form-row"><input id="renameInput_' + card.id + '" placeholder="New name" value="' + escAttr(card.title) + '"></div></div></div>';
             }
 
             function renderSection(cardId, section, hideValues, isSel, depth) {
               depth = depth || 0;
               var sc = isSel && selected['sec_' + section.id];
               var nestedClass = depth > 0 ? ' section-nested' : '';
+              var q = searchQ();
               var childSections = section.sections || [];
+              if (q) childSections = childSections.filter(function(cs){ return sectionMatchCount(cs, q) > 0; });
               return '<div class="section' + nestedClass + '" data-section="' + section.id + '">' +
                 (editingSectionId === section.id ?
                   '<div class="section-title-editing" data-edit-card="' + cardId + '" data-edit-sid="' + section.id + '">' +
-                    '<input id="edit_section_' + section.id + '" value="' + esc(section.title) + '">' +
+                    '<input id="edit_section_' + section.id + '" value="' + escAttr(section.title) + '">' +
                   '</div>'
                 :
                   '<div class="section-header" oncontextmenu="showSectionHeaderMenu(event,\'' + cardId + '\',\'' + section.id + '\')">' +
@@ -768,7 +849,12 @@ enum DefaultWidget {
                       '<button class="section-dropdown-btn" onclick="showSectionDropdown(event,\'' + cardId + '\',\'' + section.id + '\')">\u25BE</button>' +
                     '</div>') +
                   '</div>') +
-                section.items.map(function(item, idx) { return renderRow(cardId, section.id, item, hideValues, isSel, idx); }).join('') +
+                section.items.map(function(item, idx) {
+                  // Keep the original idx even when filtering so drag/drop
+                  // indexes stay consistent with the data array.
+                  if (q && !itemMatches(item, q)) return '';
+                  return renderRow(cardId, section.id, item, hideValues, isSel, idx);
+                }).join('') +
                 '<div class="inline-form" id="entryForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="entry">' +
                 '<input id="inp_label_' + section.id + '" placeholder="Label">' +
                 '<textarea id="inp_value_' + section.id + '" placeholder="Value" rows="1"></textarea>' +
@@ -787,7 +873,7 @@ enum DefaultWidget {
                 '</div>';
             }
 
-            function renderActionRow(cardId, sectionId, item, isSel, isRecent, recentSuffix) {
+            function renderActionRow(cardId, sectionId, item, isSel, idx, isRecent, recentSuffix) {
               var chk = isSel && selected[item.id];
               var srcHtml = recentSuffix ? '<span class="recent-source">' + esc(recentSuffix) + '</span>' : '';
               var labelHtml = '<span class="label">' + esc(item.label) + srcHtml + '</span>';
@@ -796,7 +882,8 @@ enum DefaultWidget {
 
               if (isRecent) {
                 return '<div class="row row-action recent-row' + runningCls + '" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
-                  'onclick="runActionById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',true)">' +
+                  'onclick="runActionById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',true)" ' +
+                  'oncontextmenu="showRecentMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
                   labelHtml + valHtml + '</div>';
               }
               if (isSel) {
@@ -804,7 +891,7 @@ enum DefaultWidget {
                   '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
                   labelHtml + valHtml + '</div>';
               }
-              return '<div class="row row-action' + runningCls + '" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
+              return '<div class="row row-action' + runningCls + '" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" data-idx="' + idx + '" ' +
                 'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
                 'onclick="runActionById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',false)" ' +
                 'oncontextmenu="showEntryMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
@@ -812,7 +899,7 @@ enum DefaultWidget {
                 labelHtml + valHtml + '</div>';
             }
 
-            function renderLaunchRow(cardId, sectionId, item, isSel, isRecent, recentSuffix) {
+            function renderLaunchRow(cardId, sectionId, item, isSel, idx, isRecent, recentSuffix) {
               var chk = isSel && selected[item.id];
               var srcHtml = recentSuffix ? '<span class="recent-source">' + esc(recentSuffix) + '</span>' : '';
               var labelHtml = '<span class="label">' + esc(item.label) + srcHtml + '</span>';
@@ -821,7 +908,8 @@ enum DefaultWidget {
 
               if (isRecent) {
                 return '<div class="row row-launch recent-row' + runningCls + '" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
-                  'onclick="runLaunchById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',true)">' +
+                  'onclick="runLaunchById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',true)" ' +
+                  'oncontextmenu="showRecentMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
                   labelHtml + valHtml + '</div>';
               }
               if (isSel) {
@@ -829,7 +917,7 @@ enum DefaultWidget {
                   '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
                   labelHtml + valHtml + '</div>';
               }
-              return '<div class="row row-launch' + runningCls + '" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
+              return '<div class="row row-launch' + runningCls + '" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" data-idx="' + idx + '" ' +
                 'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
                 'onclick="runLaunchById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',false)" ' +
                 'oncontextmenu="showEntryMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
@@ -838,39 +926,47 @@ enum DefaultWidget {
             }
 
             function renderRow(cardId, sectionId, item, hideValues, isSel, idx, isRecent, recentSuffix) {
-              // Inline editing mode (works for static, action, and launch items)
-              if (editingItemId === item.id) {
+              // Inline editing mode (works for static, action, and launch items).
+              // Never rendered inside the Recently Copied mirror — the real row
+              // hosts the inputs so their element ids stay unique and the edit
+              // opens where the user actually right-clicked.
+              if (editingItemId === item.id && !isRecent) {
                 var content = (item.type === 'action' || item.type === 'launch') ? (item.command || '') : (item.value || '');
                 var rowsN = Math.min(content.split('\n').length, 4);
                 var fieldCls = (item.type === 'action' || item.type === 'launch') ? ' class="action-command-field"' : '';
                 return '<div class="row-editing" data-edit-card="' + cardId + '" data-edit-section="' + sectionId + '" data-edit-item="' + item.id + '">' +
-                  '<input id="edit_label_' + item.id + '" value="' + esc(item.label) + '">' +
+                  '<input id="edit_label_' + item.id + '" value="' + escAttr(item.label) + '">' +
                   '<textarea id="edit_value_' + item.id + '" rows="' + rowsN + '"' + fieldCls + '>' + esc(content) + '</textarea>' +
                   '</div>';
               }
 
               if (item.type === 'action') {
-                return renderActionRow(cardId, sectionId, item, isSel, isRecent, recentSuffix);
+                return renderActionRow(cardId, sectionId, item, isSel, idx, isRecent, recentSuffix);
               }
               if (item.type === 'launch') {
-                return renderLaunchRow(cardId, sectionId, item, isSel, isRecent, recentSuffix);
+                return renderLaunchRow(cardId, sectionId, item, isSel, idx, isRecent, recentSuffix);
               }
 
               var chk = isSel && selected[item.id];
+              var hidden = hideValues || !!item.hide;
               var firstLine = item.value.split('\n')[0];
               var isLong = item.value.length > 30 || item.value.includes('\n');
-              var tooltipHtml = isLong && !hideValues ? '<div class="value-tooltip">' + esc(item.value) + '</div>' : '';
+              // Hidden values are hover-revealed by design, so they get the
+              // full-value tooltip too. Suppressed in select mode, where the
+              // fixed bottom bar covers it and hover means "selecting".
+              var tooltipHtml = isLong && !isSel ? '<div class="value-tooltip">' + esc(item.value) + '</div>' : '';
 
               var valHtml;
-              if (hideValues) {
-                valHtml = '<span class="value-dots">\u2022\u2022\u2022\u2022\u2022\u2022</span><span class="value value-real">' + esc(firstLine) + '</span>';
+              if (hidden) {
+                valHtml = '<span class="value-dots">\u2022\u2022\u2022\u2022\u2022\u2022</span><span class="value value-real">' + esc(firstLine) + '</span>' + tooltipHtml;
               } else {
                 valHtml = '<span class="value">' + esc(firstLine) + '</span>' + tooltipHtml;
               }
               if (isRecent) {
                 var srcHtml = recentSuffix ? '<span class="recent-source">' + esc(recentSuffix) + '</span>' : '';
                 return '<div class="row recent-row" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
-                  'onclick="copyById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',' + hideValues + ',true)">' +
+                  'onclick="copyById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',' + hidden + ',true)" ' +
+                  'oncontextmenu="showRecentMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
                   '<span class="label">' + esc(item.label) + srcHtml + '</span>' + valHtml + '</div>';
               }
               if (isSel) {
@@ -880,7 +976,7 @@ enum DefaultWidget {
               }
               return '<div class="row" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" data-idx="' + idx + '" ' +
                 'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
-                'onclick="copyById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',' + hideValues + ')" ' +
+                'onclick="copyById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',' + hidden + ')" ' +
                 'oncontextmenu="showEntryMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
                 '<span class="drag-handle">\u2630</span>' +
                 '<span class="label">' + esc(item.label) + '</span>' + valHtml + '</div>';
@@ -916,13 +1012,17 @@ enum DefaultWidget {
               e.preventDefault();
               var targetRow = e.currentTarget;
               if (targetRow.dataset.section !== dragSectionId) return;
+              // Read the drop target's geometry BEFORE commitPendingEdit —
+              // its render() detaches targetRow, zeroing the rect.
+              var toIdx = parseInt(targetRow.dataset.idx);
+              var rect = targetRow.getBoundingClientRect();
+              if (e.clientY > rect.top + rect.height / 2) toIdx++;
+              if (isNaN(toIdx)) return;
+              commitPendingEdit();
               var card = activePage().cards.find(function(c){ return c.id === dragCardId; });
               var section = card && findSection(card.sections, dragSectionId);
               if (!section) return;
               var fromIdx = section.items.findIndex(function(i){ return i.id === dragItemId; });
-              var toIdx = parseInt(targetRow.dataset.idx);
-              var rect = targetRow.getBoundingClientRect();
-              if (e.clientY > rect.top + rect.height / 2) toIdx++;
               if (fromIdx === toIdx || fromIdx < 0) return;
               var item = section.items.splice(fromIdx, 1)[0];
               if (toIdx > fromIdx) toIdx--;
@@ -1031,7 +1131,7 @@ enum DefaultWidget {
                 });
                 trackRecent(cardId, sectionId, itemId, fromRecents);
               }).catch(function(err) {
-                showToast('Action failed: ' + (err || 'unknown'));
+                showToast('Action failed: ' + (err || 'unknown'), 'error');
               }).finally(function() {
                 delete _runningActions[itemId];
                 document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){ el.classList.remove('running'); });
@@ -1074,7 +1174,7 @@ enum DefaultWidget {
                     v.innerHTML = '<span class="go-glyph">\u25B6</span>GO';
                   }, 1400);
                 });
-                showToast('Launch failed: ' + (err || 'unknown'));
+                showToast('Launch failed: ' + (err || 'unknown'), 'error');
               }).finally(function() {
                 delete _runningActions[itemId];
                 document.querySelectorAll('.row[data-item="'+itemId+'"]').forEach(function(el){ el.classList.remove('running'); });
@@ -1173,14 +1273,14 @@ enum DefaultWidget {
             var copyEffects = [fxDecrypt, fxMatrix, fxBinary, fxTypewriter, fxBlocks, fxShuffle];
             function randomEffect() { return copyEffects[Math.floor(Math.random()*copyEffects.length)]; }
 
-            var copyAnimating = {};
             function copyValue(row, text, isHidden) {
               if (selectMode) return;
-              var itemId = row.dataset.item || row.dataset.idx || '';
               if (window.GlanceBar) GlanceBar.copy(text);
               else navigator.clipboard.writeText(text).catch(function(){});
-              // Skip animation if already animating this row
-              if (copyAnimating[itemId]) return;
+              // Gate the animation per row node — the same item can be on
+              // screen twice (original + Recently Copied) and each copy should
+              // animate independently.
+              if (row._copyAnimating) return;
               var dotsEl = row.querySelector('.value-dots');
               var realEl = row.querySelector('.value-real');
               var plainEl = (!dotsEl) ? row.querySelector('.value') : null;
@@ -1188,7 +1288,7 @@ enum DefaultWidget {
               if (!targetEl) return;
               // Store original from the data, not from DOM
               var firstLine = text.split('\n')[0];
-              copyAnimating[itemId] = true;
+              row._copyAnimating = true;
               if (dotsEl) dotsEl.style.display = 'none';
               if (realEl) realEl.style.display = 'inline';
               targetEl.classList.add('copied');
@@ -1197,15 +1297,42 @@ enum DefaultWidget {
                   targetEl.classList.remove('copied');
                   if (dotsEl) { dotsEl.style.display = ''; realEl.style.display = ''; }
                   targetEl.textContent = firstLine;
-                  delete copyAnimating[itemId];
+                  row._copyAnimating = false;
                 }, 900);
               });
             }
 
             // ===== SELECT MODE =====
-            function enterSelectMode(cardId) { selectMode = true; selectCardId = cardId; selected = {}; hideContextMenu(); render(); }
+            function enterSelectMode(cardId) { commitPendingEdit(); selectMode = true; selectCardId = cardId; selected = {}; hideContextMenu(); render(); }
             function exitSelectMode() { selectMode = false; selectCardId = null; selected = {}; render(); }
-            function toggleSelectItem(id) { if (selected[id]) delete selected[id]; else selected[id] = true; render(); }
+            // Sections between the card root and an item, innermost last
+            function findAncestorSections(sections, itemId, chain) {
+              for (var i = 0; i < sections.length; i++) {
+                var s = sections[i];
+                if (s.items && s.items.some(function(x){ return x.id === itemId; })) return chain.concat([s]);
+                if (s.sections) {
+                  var found = findAncestorSections(s.sections, itemId, chain.concat([s]));
+                  if (found) return found;
+                }
+              }
+              return null;
+            }
+            function toggleSelectItem(id) {
+              if (selected[id]) {
+                delete selected[id];
+                // Deselecting one item breaks its ancestors' "entire section"
+                // selection — otherwise bulk delete would still wipe the whole
+                // section, including this item.
+                var card = activePage().cards.find(function(c){ return c.id === selectCardId; });
+                if (card) {
+                  var ancestors = findAncestorSections(card.sections, id, []);
+                  if (ancestors) ancestors.forEach(function(s){ delete selected['sec_' + s.id]; });
+                }
+              } else {
+                selected[id] = true;
+              }
+              render();
+            }
             function toggleSelectSection(sid) {
               var k = 'sec_' + sid;
               var card = activePage().cards.find(function(c){ return c.id === selectCardId; });
@@ -1237,6 +1364,29 @@ enum DefaultWidget {
                 }
               });
             }
+            function collectSelectedValues(sections, out) {
+              sections.forEach(function(s){
+                var wholeSection = selected['sec_' + s.id];
+                s.items.forEach(function(i){
+                  if (wholeSection || selected[i.id]) {
+                    var v = (i.type === 'action' || i.type === 'launch') ? i.command : i.value;
+                    out.push(i.label + ': ' + (v || ''));
+                  }
+                });
+                if (s.sections) collectSelectedValues(s.sections, out);
+              });
+            }
+            function copySelected() {
+              var card = activePage().cards.find(function(c){ return c.id === selectCardId; });
+              if (!card) return;
+              var lines = [];
+              collectSelectedValues(card.sections, lines);
+              if (!lines.length) return;
+              if (window.GlanceBar) GlanceBar.copy(lines.join('\n'));
+              else navigator.clipboard.writeText(lines.join('\n')).catch(function(){});
+              showToast('Copied ' + lines.length + ' entr' + (lines.length === 1 ? 'y' : 'ies'));
+              exitSelectMode();
+            }
             function confirmDeleteSelected() {
               var card = activePage().cards.find(function(c){ return c.id === selectCardId; });
               if (!card) return;
@@ -1249,6 +1399,7 @@ enum DefaultWidget {
                 function(){
                   applyDeleteSelected(card.sections);
                   card.sections = card.sections.filter(function(s){return !s._del;});
+                  pruneRecents();
                   save(); exitSelectMode();
                 });
             }
@@ -1263,8 +1414,39 @@ enum DefaultWidget {
               document.getElementById('cOk').onclick = function(){ hideConfirm(); onOk(); };
             }
             function hideConfirm() { document.getElementById('confirmOverlay').classList.remove('show'); }
+            document.getElementById('confirmOverlay').addEventListener('click', function(e){
+              if (e.target === this) hideConfirm();
+            });
 
             // ===== FORMS =====
+            // Multi-line "Label: Value" (or "Label = Value" / tab-separated)
+            // pastes into the add-entry label field create one entry per line.
+            function parseBulkEntries(text) {
+              var out = [];
+              text.split('\n').forEach(function(line){
+                line = line.trim();
+                if (!line) return;
+                var m = line.match(/^([^:=\t]+)[:=\t]\s*(.+)$/);
+                if (m) out.push({ label: m[1].trim(), value: m[2].trim() });
+              });
+              return out;
+            }
+            function installBulkPaste(labelEl, cid, sid) {
+              if (!labelEl || labelEl._bulkBound) return;
+              labelEl._bulkBound = true;
+              labelEl.addEventListener('paste', function(ev){
+                var text = ev.clipboardData ? ev.clipboardData.getData('text') : '';
+                if (!text || text.indexOf('\n') === -1) return;
+                var entries = parseBulkEntries(text);
+                if (entries.length < 2) return;
+                ev.preventDefault();
+                var s = findSectionInCard(cid, sid);
+                if (!s) return;
+                entries.forEach(function(en){ s.items.push({ id: uid(), label: en.label, value: en.value }); });
+                save(); render();
+                showToast('Added ' + entries.length + ' entries');
+              });
+            }
             function showAddEntryForm(cid, sid) {
               var form = document.getElementById('entryForm_'+sid);
               form.classList.add('show');
@@ -1272,7 +1454,8 @@ enum DefaultWidget {
                 var labelEl = document.getElementById('inp_label_'+sid);
                 var valueEl = document.getElementById('inp_value_'+sid);
                 labelEl.focus();
-                installFormBlur([labelEl, valueEl], function(){ submitEntry(cid, sid); }, function(){ hideAddEntryForm(sid); });
+                installBulkPaste(labelEl, cid, sid);
+                installFormBlur([labelEl, valueEl], function(){ return submitEntry(cid, sid); }, function(){ hideAddEntryForm(sid); });
               },50);
             }
             function hideAddEntryForm(sid) {
@@ -1281,9 +1464,10 @@ enum DefaultWidget {
             }
             function submitEntry(cid, sid) {
               var l = document.getElementById('inp_label_'+sid).value.trim(), v = document.getElementById('inp_value_'+sid).value.trim();
-              if (!l||!v) return;
+              if (!l||!v) return false;
               var s = findSectionInCard(cid, sid);
               if (s) { s.items.push({id:uid(),label:l,value:v}); save(); render(); }
+              return true;
             }
             function showAddActionForm(cid, sid) {
               var form = document.getElementById('actionForm_'+sid);
@@ -1292,7 +1476,7 @@ enum DefaultWidget {
                 var labelEl = document.getElementById('act_label_'+sid);
                 var cmdEl = document.getElementById('act_command_'+sid);
                 labelEl.focus();
-                installFormBlur([labelEl, cmdEl], function(){ submitAction(cid, sid); }, function(){ hideAddActionForm(sid); });
+                installFormBlur([labelEl, cmdEl], function(){ return submitAction(cid, sid); }, function(){ hideAddActionForm(sid); });
               },50);
             }
             function hideAddActionForm(sid) {
@@ -1302,9 +1486,10 @@ enum DefaultWidget {
             function submitAction(cid, sid) {
               var l = document.getElementById('act_label_'+sid).value.trim();
               var c = document.getElementById('act_command_'+sid).value.trim();
-              if (!l||!c) return;
+              if (!l||!c) return false;
               var s = findSectionInCard(cid, sid);
               if (s) { s.items.push({id:uid(),type:'action',label:l,command:c}); save(); render(); }
+              return true;
             }
             function showAddLaunchForm(cid, sid) {
               var form = document.getElementById('launchForm_'+sid);
@@ -1313,7 +1498,7 @@ enum DefaultWidget {
                 var labelEl = document.getElementById('lnc_label_'+sid);
                 var cmdEl = document.getElementById('lnc_command_'+sid);
                 labelEl.focus();
-                installFormBlur([labelEl, cmdEl], function(){ submitLaunch(cid, sid); }, function(){ hideAddLaunchForm(sid); });
+                installFormBlur([labelEl, cmdEl], function(){ return submitLaunch(cid, sid); }, function(){ hideAddLaunchForm(sid); });
               },50);
             }
             function hideAddLaunchForm(sid) {
@@ -1323,9 +1508,10 @@ enum DefaultWidget {
             function submitLaunch(cid, sid) {
               var l = document.getElementById('lnc_label_'+sid).value.trim();
               var c = document.getElementById('lnc_command_'+sid).value.trim();
-              if (!l||!c) return;
+              if (!l||!c) return false;
               var s = findSectionInCard(cid, sid);
               if (s) { s.items.push({id:uid(),type:'launch',label:l,command:c}); save(); render(); }
+              return true;
             }
             function showNewSectionForm(cid) {
               hideContextMenu();
@@ -1376,14 +1562,33 @@ enum DefaultWidget {
               setTimeout(function(){
                 var labelEl = document.getElementById('edit_label_'+iid);
                 var valueEl = document.getElementById('edit_value_'+iid);
-                if(labelEl) labelEl.focus();
+                if(labelEl) {
+                  labelEl.closest('.row-editing').scrollIntoView({ block: 'nearest' });
+                  labelEl.focus();
+                }
                 installEditBlur([labelEl, valueEl], function(){ trySaveEditItem(cid,sid,iid); });
               }, 50);
             }
+            // Harvest an in-progress inline edit before an unrelated render()
+            // rebuilds the DOM — otherwise the typed text is silently lost and
+            // a stuck "ghost" edit row can survive across page switches.
+            function commitPendingEdit() {
+              if (editingItemId) {
+                var row = document.querySelector('.row-editing');
+                if (row) trySaveEditItem(row.dataset.editCard, row.dataset.editSection, row.dataset.editItem);
+                else editingItemId = null;
+              }
+              if (editingSectionId) {
+                var sec = document.querySelector('.section-title-editing');
+                if (sec) trySaveEditSection(sec.dataset.editCard, sec.dataset.editSid);
+                else editingSectionId = null;
+              }
+            }
+
             function trySaveEditItem(cid, sid, iid) {
               var labelEl = document.getElementById('edit_label_'+iid);
               var valueEl = document.getElementById('edit_value_'+iid);
-              if (!labelEl || !valueEl) return;
+              if (!labelEl || !valueEl) { editingItemId = null; return; }
               var l = labelEl.value.trim(), v = valueEl.value.trim();
               if (l && v) {
                 var sec = findSectionInCard(cid, sid);
@@ -1411,7 +1616,7 @@ enum DefaultWidget {
             }
             function trySaveEditSection(cid, sid) {
               var el = document.getElementById('edit_section_'+sid);
-              if (!el) return;
+              if (!el) { editingSectionId = null; return; }
               var t = el.value.trim();
               if (t) { var sec = findSectionInCard(cid,sid); if(sec) sec.title=t; save(); }
               editingSectionId = null; render();
@@ -1421,14 +1626,24 @@ enum DefaultWidget {
             var formBlurTimeout = null;
             function installFormBlur(elements, saveFn, cancelFn) {
               elements.forEach(function(el){
-                if (!el) return;
+                // Form elements survive show/hide cycles (only render()
+                // recreates them) — guard against stacking duplicate blur
+                // listeners that would double-fire the save.
+                if (!el || el._blurBound) return;
+                el._blurBound = true;
                 el.addEventListener('blur', function(){
                   formBlurTimeout = setTimeout(function(){
                     if (window._escCancel) { window._escCancel = false; cancelFn(); return; }
                     // Check if any of the elements have content
                     var hasContent = elements.some(function(e){ return e && e.value.trim(); });
-                    if (hasContent) saveFn();
-                    else cancelFn();
+                    if (!hasContent) { cancelFn(); return; }
+                    // A submit that validates false (e.g. only one of two
+                    // required fields filled) would otherwise leave the form
+                    // stuck open with orphaned text — cancel and say why.
+                    if (saveFn() === false) {
+                      cancelFn();
+                      showToast('Not saved — required fields missing', 'error');
+                    }
                   }, 100);
                 });
                 el.addEventListener('focus', function(){
@@ -1439,7 +1654,8 @@ enum DefaultWidget {
 
             function installEditBlur(elements, saveFn) {
               elements.forEach(function(el){
-                if (!el) return;
+                if (!el || el._blurBound) return;
+                el._blurBound = true;
                 el.addEventListener('blur', function(){
                   editBlurTimeout = setTimeout(function(){
                     if (window._escCancel) { window._escCancel = false; return; }
@@ -1452,22 +1668,102 @@ enum DefaultWidget {
               });
             }
 
+            // Position a context menu fully on-screen (clamps both axes using
+            // the menu's real rendered size)
+            function placeMenu(m, x, y) {
+              m.classList.add('show');
+              var mw = m.offsetWidth, mh = m.offsetHeight;
+              m.style.left = Math.max(4, Math.min(x, window.innerWidth - mw - 4)) + 'px';
+              m.style.top = Math.max(4, Math.min(y, window.innerHeight - mh - 4)) + 'px';
+            }
+
+            // Drop recents refs that no longer resolve (after any deletion)
+            function pruneRecents() {
+              data.pages.forEach(function(p){
+                if (p.recents) p.recents = p.recents.filter(function(r){ return resolveRecent(p, r); });
+              });
+            }
+
             // ENTRY CONTEXT MENU (right-click on a row)
             function showEntryMenu(e, cid, sid, iid) {
+              e.preventDefault(); e.stopPropagation();
+              var sec = findSectionInCard(cid, sid);
+              var item = sec && sec.items.find(function(i){ return i.id === iid; });
+              var m = document.getElementById('contextMenu');
+              var html =
+                '<div class="context-menu-item" onclick="startEditItem(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Edit</div>' +
+                '<div class="context-menu-item" onclick="duplicateEntry(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Duplicate</div>';
+              if (item && !item.type) {
+                html += '<div class="context-menu-item" onclick="toggleItemHide(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Hide Value <div class="context-menu-toggle'+(item.hide?' on':'')+'"></div></div>';
+              }
+              html +=
+                '<div class="context-menu-sep"></div>' +
+                '<div class="context-menu-item danger" onclick="deleteOneEntry(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Delete</div>';
+              m.innerHTML = html;
+              placeMenu(m, e.clientX, e.clientY+4);
+            }
+            function toggleItemHide(cid, sid, iid) {
+              hideContextMenu();
+              var sec = findSectionInCard(cid, sid);
+              var item = sec && sec.items.find(function(i){ return i.id === iid; });
+              if (!item) return;
+              item.hide = !item.hide;
+              if (!item.hide) delete item.hide;
+              save(); render();
+            }
+            function duplicateEntry(cid, sid, iid) {
+              hideContextMenu();
+              var sec = findSectionInCard(cid, sid);
+              if (!sec) return;
+              var idx = sec.items.findIndex(function(i){ return i.id === iid; });
+              if (idx < 0) return;
+              var copy = JSON.parse(JSON.stringify(sec.items[idx]));
+              copy.id = uid();
+              sec.items.splice(idx + 1, 0, copy);
+              save(); render();
+            }
+            function deleteOneEntry(cid, sid, iid) {
+              hideContextMenu();
+              var sec = findSectionInCard(cid, sid);
+              if (!sec) return;
+              var item = sec.items.find(function(i){ return i.id === iid; });
+              if (!item) return;
+              showConfirm('Delete "'+esc(item.label)+'"?', 'This entry will be permanently deleted.', function(){
+                sec.items = sec.items.filter(function(i){ return i.id !== iid; });
+                pruneRecents();
+                save(); render();
+              });
+            }
+
+            // RECENTS CONTEXT MENUS (right-click on a recents row / the card header)
+            function showRecentMenu(e, cid, sid, iid) {
               e.preventDefault(); e.stopPropagation();
               var m = document.getElementById('contextMenu');
               m.innerHTML =
                 '<div class="context-menu-item" onclick="startEditItem(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Edit</div>' +
                 '<div class="context-menu-sep"></div>' +
-                '<div class="context-menu-item danger" onclick="deleteOneEntry(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Delete</div>';
-              m.style.left = Math.min(e.clientX, window.innerWidth-150)+'px';
-              m.style.top = (e.clientY+4)+'px';
-              m.classList.add('show');
+                '<div class="context-menu-item" onclick="removeFromRecents(\''+iid+'\')">Remove from Recents</div>';
+              placeMenu(m, e.clientX, e.clientY+4);
             }
-            function deleteOneEntry(cid, sid, iid) {
+            function removeFromRecents(iid) {
               hideContextMenu();
-              var sec = findSectionInCard(cid, sid);
-              if (sec) { sec.items = sec.items.filter(function(i){ return i.id !== iid; }); save(); render(); }
+              var page = activePage();
+              if (!page || !page.recents) return;
+              page.recents = page.recents.filter(function(r){ return r.itemId !== iid; });
+              save(); updateRecentsMount();
+            }
+            function showRecentsCardMenu(e) {
+              e.preventDefault(); e.stopPropagation();
+              var m = document.getElementById('contextMenu');
+              m.innerHTML = '<div class="context-menu-item" onclick="clearRecents()">Clear Recently Copied</div>';
+              placeMenu(m, e.clientX, e.clientY+4);
+            }
+            function clearRecents() {
+              hideContextMenu();
+              var page = activePage();
+              if (!page) return;
+              page.recents = [];
+              save(); updateRecentsMount();
             }
 
             // SECTION HEADER CONTEXT MENU (right-click on section title)
@@ -1479,10 +1775,44 @@ enum DefaultWidget {
                 '<div class="context-menu-item" onclick="showAddEntryForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Entry</div>' +
                 '<div class="context-menu-item" onclick="showAddActionForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Action</div>' +
                 '<div class="context-menu-item" onclick="showAddLaunchForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Launch</div>' +
-                '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>';
-              m.style.left = Math.min(e.clientX, window.innerWidth-170)+'px';
-              m.style.top = (e.clientY+4)+'px';
-              m.classList.add('show');
+                '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>' +
+                '<div class="context-menu-sep"></div>' +
+                '<div class="context-menu-item danger" onclick="deleteSection(\''+cid+'\',\''+sid+'\')">Delete Section</div>';
+              placeMenu(m, e.clientX, e.clientY+4);
+            }
+            function countSectionContents(s) {
+              var items = s.items ? s.items.length : 0, sections = 0;
+              (s.sections || []).forEach(function(cs){
+                var r = countSectionContents(cs);
+                items += r.items; sections += 1 + r.sections;
+              });
+              return { items: items, sections: sections };
+            }
+            function removeSectionById(sections, sid) {
+              for (var i = 0; i < sections.length; i++) {
+                if (sections[i].id === sid) { sections.splice(i, 1); return true; }
+                if (sections[i].sections && removeSectionById(sections[i].sections, sid)) return true;
+              }
+              return false;
+            }
+            function deleteSection(cid, sid) {
+              hideContextMenu();
+              var card = activePage().cards.find(function(c){ return c.id === cid; });
+              var sec = card && findSection(card.sections, sid);
+              if (!card || !sec) return;
+              var counts = countSectionContents(sec);
+              var body;
+              if (!counts.items && !counts.sections) body = 'This section is empty.';
+              else {
+                body = 'This will permanently delete ' + counts.items + ' entr' + (counts.items === 1 ? 'y' : 'ies');
+                if (counts.sections) body += ' and ' + counts.sections + ' subsection' + (counts.sections === 1 ? '' : 's');
+                body += '.';
+              }
+              showConfirm('Delete "'+esc(sec.title)+'"?', body, function(){
+                removeSectionById(card.sections, sid);
+                pruneRecents();
+                save(); render();
+              });
             }
 
             // SECTION DROPDOWN (from the small arrow next to +)
@@ -1495,9 +1825,7 @@ enum DefaultWidget {
                 '<div class="context-menu-item" onclick="showAddLaunchForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Launch</div>' +
                 '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>';
               var r = e.target.getBoundingClientRect();
-              m.style.left = Math.min(r.right - 150, window.innerWidth-160)+'px';
-              m.style.top = (r.bottom+4)+'px';
-              m.classList.add('show');
+              placeMenu(m, r.right - 150, r.bottom+4);
             }
             function showNewCardForm() {
               document.getElementById('newCardForm').classList.add('show');
@@ -1505,7 +1833,7 @@ enum DefaultWidget {
                 var t = document.getElementById('newCardTitle');
                 var s = document.getElementById('newCardSection');
                 t.focus();
-                installFormBlur([t, s], function(){ submitNewCard(); }, function(){ hideNewCardForm(); });
+                installFormBlur([t, s], function(){ return submitNewCard(); }, function(){ hideNewCardForm(); });
               },50);
             }
             function hideNewCardForm() {
@@ -1514,10 +1842,11 @@ enum DefaultWidget {
             }
             function submitNewCard() {
               var t = document.getElementById('newCardTitle').value.trim(), s = document.getElementById('newCardSection').value.trim()||'General';
-              if (!t) return;
-              var page = activePage(); if (!page) return;
+              if (!t) return false;
+              var page = activePage(); if (!page) return true;
               page.cards.push({id:uid(),title:t,hideValues:false,sections:[{id:uid(),title:s,items:[]}]});
               save(); render();
+              return true;
             }
             function showRenameForm(cid) {
               hideContextMenu();
@@ -1542,13 +1871,20 @@ enum DefaultWidget {
               var page = activePage(); if (!page) return;
               var c = page.cards.find(function(x){return x.id===cid;}); if (!c) return;
               showConfirm('Delete "'+esc(c.title)+'"?','This will permanently delete this card and all its entries.',function(){
-                page.cards=page.cards.filter(function(x){return x.id!==cid;}); save(); render();
+                page.cards=page.cards.filter(function(x){return x.id!==cid;});
+                pruneRecents();
+                save(); render();
               });
             }
 
             // ===== PAGE MANAGEMENT =====
-            function switchPage(pageId) { activePageId = pageId; exitSelectMode(); }
+            function switchPage(pageId) {
+              commitPendingEdit();
+              activePageId = pageId;
+              exitSelectMode();
+            }
             function addPage() {
+              commitPendingEdit();
               var name = 'Page ' + (data.pages.length + 1);
               var newPage = { id: uid(), name: name, cards: [], recents: [] };
               data.pages.push(newPage);
@@ -1565,13 +1901,11 @@ enum DefaultWidget {
               startRenameTabEl(e.target, pageId);
             }
             function startRenameTabById(pageId) {
+              // Tabs render in data.pages order — match by index, not by name,
+              // so duplicate page names rename the right tab.
+              var idx = data.pages.findIndex(function(p){ return p.id === pageId; });
               var tabs = document.querySelectorAll('.tab');
-              for (var i = 0; i < tabs.length; i++) {
-                if (tabs[i].textContent.trim() === (data.pages.find(function(p){return p.id===pageId;}) || {}).name) {
-                  startRenameTabEl(tabs[i], pageId);
-                  return;
-                }
-              }
+              if (idx >= 0 && tabs[idx]) startRenameTabEl(tabs[idx], pageId);
             }
             function startRenameTabEl(tabEl, pageId) {
               var page = data.pages.find(function(p){ return p.id === pageId; });
@@ -1595,7 +1929,8 @@ enum DefaultWidget {
               render();
             }
             function deletePage(pageId) {
-              if (data.pages.length <= 1) { showToast('Cannot delete the last page'); return; }
+              commitPendingEdit();
+              if (data.pages.length <= 1) { showToast('Cannot delete the last page', 'error'); return; }
               var page = data.pages.find(function(p){ return p.id === pageId; });
               showConfirm('Delete page "'+esc(page.name)+'"?','This will delete all cards in this page.',function(){
                 data.pages = data.pages.filter(function(p){ return p.id !== pageId; });
@@ -1604,6 +1939,7 @@ enum DefaultWidget {
               });
             }
             function toggleHideValues(cid) {
+              commitPendingEdit();
               var c = activePage().cards.find(function(x){return x.id===cid;}); if (c) c.hideValues=!c.hideValues;
               save(); render(); hideContextMenu();
             }
@@ -1622,9 +1958,7 @@ enum DefaultWidget {
                 '<div class="context-menu-sep"></div>' +
                 '<div class="context-menu-item danger" onclick="deleteCard(\''+cid+'\')">Delete Card</div>';
               var r = e.target.getBoundingClientRect();
-              m.style.left = Math.min(r.left, window.innerWidth-190)+'px';
-              m.style.top = (r.bottom+4)+'px';
-              m.classList.add('show');
+              placeMenu(m, r.left, r.bottom+4);
             }
             function showTabContextMenu(e, pageId) {
               e.preventDefault(); e.stopPropagation();
@@ -1638,11 +1972,40 @@ enum DefaultWidget {
               }
               m.innerHTML = html;
               var r = e.target.getBoundingClientRect();
-              m.style.left = Math.min(r.left, window.innerWidth-150)+'px';
-              m.style.top = (r.bottom+4)+'px';
-              m.classList.add('show');
+              placeMenu(m, r.left, r.bottom+4);
             }
             function hideContextMenu() { document.getElementById('contextMenu').classList.remove('show'); }
+
+            // Escape priority stack: menu > dialog > tab rename > search field >
+            // inline edit > form input > select mode > active search filter.
+            // Returns true when the press was consumed inside the widget; the
+            // Swift panel only dismisses itself when this returns false.
+            window._handleEscape = function() {
+              var menu = document.getElementById('contextMenu');
+              if (menu && menu.classList.contains('show')) { hideContextMenu(); return true; }
+              var overlay = document.getElementById('confirmOverlay');
+              if (overlay && overlay.classList.contains('show')) { hideConfirm(); return true; }
+              var ae = document.activeElement;
+              if (ae && ae.classList && ae.classList.contains('tab-rename-input')) { render(); return true; }
+              if (ae && ae.id === 'searchInput') { clearSearch(); ae.blur(); return true; }
+              if (editingItemId || editingSectionId) {
+                cancelEdit();
+                // cancelEdit re-renders, which destroys the inputs without a
+                // blur event — reset the flag so it can't cancel (and silently
+                // discard) the next form save.
+                window._escCancel = false;
+                return true;
+              }
+              if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) {
+                // An add/rename form input: cancel it without saving
+                window._escCancel = true;
+                ae.blur();
+                return true;
+              }
+              if (selectMode) { exitSelectMode(); return true; }
+              if (searchQuery.trim()) { clearSearch(); return true; }
+              return false;
+            };
 
             document.addEventListener('click', function(e) { if (!e.target.closest('.context-menu') && !e.target.closest('.card-menu-btn')) hideContextMenu(); });
             document.addEventListener('keydown', function(e) {
@@ -1664,12 +2027,42 @@ enum DefaultWidget {
                 var f=e.target.closest('.inline-form,.card-form');
                 if(f){ e.preventDefault(); e.target.blur(); }
               }
-              if (e.key==='Escape') { if(editingItemId||editingSectionId){cancelEdit();return;} if(selectMode){exitSelectMode();return;} hideConfirm(); }
+              if (e.key==='Escape') { if (window._handleEscape()) e.preventDefault(); }
+              if ((e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); window._focusSearch(); }
             });
+
+            // Search field lives outside #app so re-renders never steal its focus
+            (function initSearch() {
+              var input = document.getElementById('searchInput');
+              var clearBtn = document.getElementById('searchClear');
+              if (!input) return;
+              input.addEventListener('input', function(){
+                commitPendingEdit();
+                searchQuery = input.value;
+                // Filtering can hide the card being bulk-edited while its
+                // select-bar stays live — leave select mode instead.
+                if (selectMode && searchQuery.trim()) { selectMode = false; selectCardId = null; selected = {}; }
+                document.getElementById('searchWrap').classList.toggle('has-query', !!searchQuery.trim());
+                render();
+              });
+              input.addEventListener('keydown', function(ev){
+                if (ev.key === 'Enter') {
+                  ev.preventDefault();
+                  if (selectMode) return;  // rows are selection toggles here
+                  // Copy the first visible plain entry (never run actions from Enter)
+                  var row = document.querySelector('#app .row:not(.row-action):not(.row-launch)');
+                  if (row) row.click();
+                }
+              });
+              clearBtn.addEventListener('click', function(){ clearSearch(); });
+            })();
 
             if (data.pages.length) activePageId = data.pages[0].id;
             render();
-            setTimeout(function(){ save(); }, 500);
+            // Persist boot-time migrations — but ONLY when real data actually
+            // loaded. If data.json exists but failed to parse/inject, saving
+            // here would overwrite the user's file with the sample data.
+            setTimeout(function(){ if (window._dataLoaded) save(); }, 500);
           </script>
         </body>
         </html>

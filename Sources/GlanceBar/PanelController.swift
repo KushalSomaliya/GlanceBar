@@ -12,6 +12,15 @@ class PanelController {
     private var onPanelShow: (() -> Void)?
     private(set) var isVisible = false
     private(set) var isPinnedToDesktop = false
+    private var isAnimating = false
+
+    /// The display the user is interacting with (cursor location), falling
+    /// back to the main screen. NSScreen.main alone pins the panel to the
+    /// primary display on multi-monitor setups.
+    private var activationScreen: NSScreen? {
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main
+    }
 
     init(preferencesManager: PreferencesManager) {
         self.preferencesManager = preferencesManager
@@ -63,6 +72,7 @@ class PanelController {
 
         webViewController.loadWidget()
         updateVisualEffectAppearance()
+        installFindShortcut()
 
         if preferencesManager.isPinnedToDesktop {
             isPinnedToDesktop = true
@@ -98,6 +108,14 @@ class PanelController {
 
     func setOnPreferencesShortcut(_ handler: @escaping () -> Void) {
         (panel as? GlancePanel)?.onPreferencesShortcut = handler
+    }
+
+    private func installFindShortcut() {
+        (panel as? GlancePanel)?.onFindShortcut = { [weak self] in
+            self?.webViewController.webView.evaluateJavaScript(
+                "if(window._focusSearch)window._focusSearch();"
+            ) { _, _ in }
+        }
     }
 
     func setOnPanelShow(_ handler: @escaping () -> Void) {
@@ -148,8 +166,9 @@ class PanelController {
     // MARK: - Slide Animations
 
     private func slideIn() {
-        guard !isVisible else { return }
-        guard let screen = NSScreen.main else { return }
+        guard !isVisible, !isAnimating else { return }
+        guard let screen = activationScreen else { return }
+        isAnimating = true
 
         let screenFrame = screen.frame
         let panelWidth = preferencesManager.panelWidth
@@ -175,6 +194,7 @@ class PanelController {
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             panel.animator().setFrame(endFrame, display: true)
         }, completionHandler: { [weak self] in
+            self?.isAnimating = false
             self?.isVisible = true
             self?.panel.makeKey()
             self?.installDismissMonitors()
@@ -184,8 +204,10 @@ class PanelController {
     }
 
     private func slideOut() {
-        guard isVisible else { return }
-        guard let screen = NSScreen.main else { return }
+        guard isVisible, !isAnimating else { return }
+        // Slide off the edge of the screen the panel is actually on
+        guard let screen = panel.screen ?? NSScreen.main else { return }
+        isAnimating = true
 
         removeDismissMonitors()
 
@@ -201,6 +223,7 @@ class PanelController {
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             panel.animator().setFrame(offScreenFrame, display: true)
         }, completionHandler: { [weak self] in
+            self?.isAnimating = false
             self?.panel.orderOut(nil)
             self?.isVisible = false
         })
@@ -209,6 +232,9 @@ class PanelController {
     // MARK: - Dismiss Monitors
 
     private func installDismissMonitors() {
+        // Idempotent: never stack a second set of monitors (they'd leak and
+        // fire twice)
+        removeDismissMonitors()
         clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in
@@ -221,16 +247,17 @@ class PanelController {
 
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == 53 {
-                // Let the WebView handle Escape first if an input is focused
-                let js = "document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')"
+                // Let the widget consume Escape first (close menu/dialog,
+                // cancel edit, exit select mode, clear search). Only dismiss
+                // the panel when the page had nothing to cancel. The ternary
+                // fallback keeps the old behavior for legacy widget HTML
+                // without _handleEscape.
+                let js = "window._handleEscape ? window._handleEscape() : "
+                    + "((document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')) "
+                    + "? (window._escCancel=true,cancelEdit(),true) : false)"
                 self?.webViewController.webView.evaluateJavaScript(js) { result, _ in
-                    if let hasFocus = result as? Bool, hasFocus {
-                        // Input is focused — set cancel flag then blur
-                        self?.webViewController.webView.evaluateJavaScript("window._escCancel=true;cancelEdit();") { _, _ in }
-                    } else {
-                        // Nothing focused — dismiss the panel
-                        self?.slideOut()
-                    }
+                    if let handled = result as? Bool, handled { return }
+                    self?.slideOut()
                 }
                 return nil
             }

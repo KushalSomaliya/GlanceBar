@@ -38,9 +38,14 @@ class HotCornerMonitor {
     private func handleMouseMoved() {
         let corner = preferencesManager.hotCorner
         guard corner != .disabled else { return }
-        guard let screen = NSScreen.main else { return }
 
         let mouseLocation = NSEvent.mouseLocation
+        // Check the corner of the display the cursor is actually on —
+        // NSScreen.main is the menu-bar/key-window screen, so using it would
+        // make hot corners dead on every secondary display.
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
+            ?? NSScreen.main
+        else { return }
         let screenFrame = screen.frame
         let regionSize = AppConstants.cornerRegionSize
 

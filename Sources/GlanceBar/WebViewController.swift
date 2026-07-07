@@ -15,41 +15,37 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
         return "\(dir)/data.json"
     }
 
+    private static let bridgeScript = WKUserScript(
+        source: """
+            window.GlanceBar = {
+                copy: function(text) {
+                    window.webkit.messageHandlers.glancebar.postMessage({ action: 'copy', text: text });
+                },
+                openURL: function(url) {
+                    window.webkit.messageHandlers.glancebar.postMessage({ action: 'openURL', url: url });
+                },
+                saveData: function(data) {
+                    window.webkit.messageHandlers.glancebar.postMessage({ action: 'saveData', data: JSON.stringify(data) });
+                },
+                exportData: function() {
+                    window.webkit.messageHandlers.glancebar.postMessage({ action: 'exportData' });
+                },
+                importData: function() {
+                    window.webkit.messageHandlers.glancebar.postMessage({ action: 'importData' });
+                },
+                runAction: function(id, command, timeout) {
+                    window.webkit.messageHandlers.glancebar.postMessage({ action: 'runAction', id: id, command: command, timeout: timeout || 30 });
+                }
+            };
+            """,
+        injectionTime: .atDocumentStart,
+        forMainFrameOnly: true
+    )
+
     init(preferencesManager: PreferencesManager) {
         self.preferencesManager = preferencesManager
 
-        let userContentController = WKUserContentController()
-
-        let bridgeScript = WKUserScript(
-            source: """
-                window.GlanceBar = {
-                    copy: function(text) {
-                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'copy', text: text });
-                    },
-                    openURL: function(url) {
-                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'openURL', url: url });
-                    },
-                    saveData: function(data) {
-                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'saveData', data: JSON.stringify(data) });
-                    },
-                    exportData: function() {
-                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'exportData' });
-                    },
-                    importData: function() {
-                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'importData' });
-                    },
-                    runAction: function(id, command, timeout) {
-                        window.webkit.messageHandlers.glancebar.postMessage({ action: 'runAction', id: id, command: command, timeout: timeout || 30 });
-                    }
-                };
-                """,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        )
-        userContentController.addUserScript(bridgeScript)
-
         let config = WKWebViewConfiguration()
-        config.userContentController = userContentController
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
 
         webView = WKWebView(frame: .zero, configuration: config)
@@ -58,8 +54,23 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
 
         super.init()
 
+        rebuildUserScripts(theme: preferencesManager.theme)
         webView.navigationDelegate = self
-        userContentController.add(self, name: "glancebar")
+        config.userContentController.add(self, name: "glancebar")
+    }
+
+    /// Injects the bridge plus a document-start theme stamp. Setting
+    /// data-theme before first paint prevents the flash of the wrong theme
+    /// on every load when the forced theme differs from the system one.
+    private func rebuildUserScripts(theme: String) {
+        let controller = webView.configuration.userContentController
+        controller.removeAllUserScripts()
+        controller.addUserScript(Self.bridgeScript)
+        controller.addUserScript(WKUserScript(
+            source: "document.documentElement.setAttribute('data-theme', '\(theme)');",
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
     }
 
     func loadWidget() {
@@ -97,6 +108,9 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
     }
 
     func setTheme(_ theme: String) {
+        // Update the live page and the document-start script so the next
+        // reload paints with the right theme from the first frame.
+        rebuildUserScripts(theme: theme)
         webView.evaluateJavaScript(
             "document.documentElement.setAttribute('data-theme', '\(theme)');"
         ) { _, _ in }
@@ -266,18 +280,46 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
         openPanel.canChooseDirectories = false
         openPanel.title = "Import GlanceBar Data"
 
-        if openPanel.runModal() == .OK, let url = openPanel.url,
+        guard openPanel.runModal() == .OK, let url = openPanel.url,
             let jsonString = try? String(contentsOf: url, encoding: .utf8)
-        {
-            // Write to data file
-            try? jsonString.write(toFile: dataFilePath, atomically: true, encoding: .utf8)
-            // Reload widget to pick up new data
-            reload()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.webView.evaluateJavaScript("showToast('Imported successfully')") {
-                    _, _ in
-                }
-            }
+        else { return }
+
+        // Validate before touching the user's data — a malformed or
+        // wrong-shaped file must never wipe data.json.
+        guard let object = try? JSONSerialization.jsonObject(with: Data(jsonString.utf8)) as? [String: Any],
+            object["pages"] is [Any] || object["cards"] is [Any]
+        else {
+            showToast("Import failed: not a GlanceBar data file", error: true)
+            return
         }
+
+        let alert = NSAlert()
+        alert.messageText = "Replace your GlanceBar data?"
+        alert.informativeText = "Your current entries will be replaced by the imported file. The existing data is backed up to data.json.bak first."
+        alert.addButton(withTitle: "Import")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        if FileManager.default.fileExists(atPath: dataFilePath) {
+            let backupPath = dataFilePath + ".bak"
+            try? FileManager.default.removeItem(atPath: backupPath)
+            try? FileManager.default.copyItem(atPath: dataFilePath, toPath: backupPath)
+        }
+
+        try? jsonString.write(toFile: dataFilePath, atomically: true, encoding: .utf8)
+        // Reload widget to pick up new data
+        reload()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.showToast("Imported successfully")
+        }
+    }
+
+    private func showToast(_ message: String, error: Bool = false) {
+        let escaped = message
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        let kind = error ? ",'error'" : ""
+        webView.evaluateJavaScript("if(window.showToast)showToast('\(escaped)'\(kind));") { _, _ in }
     }
 }
