@@ -13,6 +13,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateChecker: UpdateChecker!
     private var updateManager: UpdateManager!
     private var lastOfferedUpdateCommit: String?
+    private var isUpdateOfferVisible = false
+    private var widgetFilePathObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // A stale copy left running (old install location, login item from a
@@ -49,6 +51,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         globalShortcutManager.start()
 
         startFileWatcher()
+        widgetFilePathObserver = NotificationCenter.default.addObserver(
+            forName: PreferencesManager.widgetFilePathDidChange,
+            object: preferencesManager,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyWidgetFilePathChange()
+        }
 
         setupUpdateSystem()
 
@@ -72,6 +81,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let widgetFilePathObserver {
+            NotificationCenter.default.removeObserver(widgetFilePathObserver)
+            self.widgetFilePathObserver = nil
+        }
         fileWatcher?.stop()
         hotCornerMonitor.stop()
         globalShortcutManager.stop()
@@ -89,14 +102,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let banner = panelController.updateBanner
         banner.onUpdate = { [weak self] in
+            self?.isUpdateOfferVisible = false
             banner.showProgress("Starting update...")
             self?.updateManager.runUpdate()
         }
         banner.onDismiss = { [weak self] in
-            self?.preferencesManager.dismissedUpdateCommit = self?.lastOfferedUpdateCommit
+            guard let self else { return }
+            let dismissedUpdateOffer = self.isUpdateOfferVisible
+            self.isUpdateOfferVisible = false
+            guard dismissedUpdateOffer else { return }
+            self.preferencesManager.dismissedUpdateCommit = self.lastOfferedUpdateCommit
         }
         updateManager.onEvent = { [weak self] event in
-            guard let banner = self?.panelController.updateBanner else { return }
+            guard let self else { return }
+            self.isUpdateOfferVisible = false
+            let banner = self.panelController.updateBanner
             switch event {
             case .status(let text): banner.showProgress(text)
             case .upToDate: banner.showTransient("You're up to date \u{2713}")
@@ -105,6 +125,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Legacy widget HTML can still post 'runUpdate' from its in-page banner.
         panelController.webViewController.onRunUpdate = { [weak self] in
+            self?.isUpdateOfferVisible = false
             self?.updateManager.runUpdate()
         }
 
@@ -119,6 +140,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard case .updateAvailable(let commit, let summary) = status else { return }
             if let commit, commit == self.preferencesManager.dismissedUpdateCommit { return }
             self.lastOfferedUpdateCommit = commit
+            self.isUpdateOfferVisible = true
             self.panelController.updateBanner.showUpdateAvailable(summary)
         }
     }
@@ -132,11 +154,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let banner = self.panelController.updateBanner
             switch status {
             case .upToDate:
+                self.isUpdateOfferVisible = false
                 banner.showTransient("GlanceBar is up to date \u{2713}")
             case .updateAvailable(let commit, let summary):
                 self.lastOfferedUpdateCommit = commit
+                self.isUpdateOfferVisible = true
                 banner.showUpdateAvailable(summary)
             case .checkFailed(let error):
+                self.isUpdateOfferVisible = false
                 banner.showTransient("Update check failed: \(error)")
             }
         }
@@ -229,5 +254,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.panelController.reloadWebView()
         }
         fileWatcher?.start()
+    }
+
+    private func applyWidgetFilePathChange() {
+        let previousFileWatcher = fileWatcher
+        previousFileWatcher?.stop()
+        fileWatcher = nil
+
+        WidgetTemplate.ensureCurrent(at: preferencesManager.widgetFilePath)
+        panelController.reloadWebView()
+        startFileWatcher()
+
+        // Keep the old watcher alive until its cancel handler closes the file descriptor.
+        DispatchQueue.main.async {
+            withExtendedLifetime(previousFileWatcher) {}
+        }
     }
 }

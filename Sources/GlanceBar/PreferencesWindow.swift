@@ -9,10 +9,12 @@ struct PreferencesView: View {
     @State private var panelWidth: Double
     @State private var launchAtLogin: Bool
     @State private var widgetPath: String
+    @State private var widgetPathError: String?
     @State private var selectedTheme: String
     @State private var shortcutDisplay: String
     @State private var isRecording = false
     @State private var keyMonitor: Any?
+    @FocusState private var isWidgetPathFocused: Bool
 
     init(preferences: PreferencesManager, onThemeChanged: (() -> Void)? = nil, onShortcutChanged: (() -> Void)? = nil) {
         self.preferences = preferences
@@ -22,6 +24,7 @@ struct PreferencesView: View {
         _panelWidth = State(initialValue: Double(preferences.panelWidth))
         _launchAtLogin = State(initialValue: preferences.launchAtLogin)
         _widgetPath = State(initialValue: preferences.widgetFilePath)
+        _widgetPathError = State(initialValue: nil)
         _selectedTheme = State(initialValue: preferences.theme)
         _shortcutDisplay = State(initialValue: preferences.shortcutDisplayString)
     }
@@ -61,6 +64,7 @@ struct PreferencesView: View {
                     Button("Clear Shortcut") {
                         stopRecording()
                         preferences.shortcutKey = ""
+                        preferences.shortcutKeyCode = nil
                         shortcutDisplay = "None"
                         onShortcutChanged?()
                     }
@@ -98,15 +102,24 @@ struct PreferencesView: View {
 
             Section("Widget File") {
                 TextField("Path", text: $widgetPath)
-                    .onChange(of: widgetPath) { _, newValue in
-                        preferences.widgetFilePath = newValue
+                    .focused($isWidgetPathFocused)
+                    .onSubmit { commitWidgetPath() }
+                    .onChange(of: isWidgetPathFocused) { _, isFocused in
+                        if !isFocused { commitWidgetPath() }
                     }
+                if let widgetPathError {
+                    Text(widgetPathError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
                 HStack {
                     Button("Open in Editor") {
+                        commitWidgetPath()
                         let url = URL(fileURLWithPath: preferences.widgetFilePath)
                         NSWorkspace.shared.open(url)
                     }
                     Button("Reveal in Finder") {
+                        commitWidgetPath()
                         let url = URL(fileURLWithPath: preferences.widgetFilePath)
                         NSWorkspace.shared.activateFileViewerSelecting([url])
                     }
@@ -122,7 +135,31 @@ struct PreferencesView: View {
         }
         .formStyle(.grouped)
         .frame(width: 420, height: 540)
+        .onAppear {
+            widgetPath = preferences.widgetFilePath
+            widgetPathError = nil
+        }
         .onDisappear { stopRecording() }
+    }
+
+    private func commitWidgetPath() {
+        guard widgetPath != preferences.widgetFilePath else {
+            widgetPathError = nil
+            return
+        }
+
+        var isDirectory: ObjCBool = false
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: widgetPath, isDirectory: &isDirectory),
+            !isDirectory.boolValue,
+            fileManager.isReadableFile(atPath: widgetPath)
+        else {
+            widgetPathError = "Choose an existing, readable file. The current widget is still in use."
+            return
+        }
+
+        widgetPathError = nil
+        preferences.widgetFilePath = widgetPath
     }
 
     private func toggleRecording() {
@@ -145,6 +182,7 @@ struct PreferencesView: View {
             if event.keyCode == 51 || event.keyCode == 117 {
                 stopRecording()
                 preferences.shortcutKey = ""
+                preferences.shortcutKeyCode = nil
                 shortcutDisplay = "None"
                 onShortcutChanged?()
                 return nil
@@ -158,6 +196,7 @@ struct PreferencesView: View {
                               mods.contains(NSEvent.ModifierFlags.option)
             if hasModifier, let chars = event.charactersIgnoringModifiers, !chars.isEmpty {
                 preferences.shortcutKey = chars
+                preferences.shortcutKeyCode = Int(event.keyCode)
                 preferences.shortcutModifiers = mods
                 shortcutDisplay = preferences.shortcutDisplayString
                 onShortcutChanged?()
