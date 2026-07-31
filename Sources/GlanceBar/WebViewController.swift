@@ -233,13 +233,12 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
         if FileManager.default.fileExists(atPath: dataFilePath),
             let jsonString = try? String(contentsOfFile: dataFilePath, encoding: .utf8)
         {
-            let escaped = jsonString
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "'", with: "\\'")
-                .replacingOccurrences(of: "\n", with: "\\n")
-            webView.evaluateJavaScript(
-                "if(window._onDataLoaded) window._onDataLoaded(JSON.parse('\(escaped)'));"
-            ) { _, _ in }
+            webView.callAsyncJavaScript(
+                "if (window._onDataLoaded) window._onDataLoaded(JSON.parse(jsonString));",
+                arguments: ["jsonString": jsonString],
+                in: nil,
+                in: .page
+            ) { _ in }
         }
     }
 
@@ -271,8 +270,15 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
             }
         case "saveData":
             if let jsonString = body["data"] as? String {
-                try? jsonString.write(
-                    toFile: dataFilePath, atomically: true, encoding: .utf8)
+                do {
+                    try jsonString.write(
+                        toFile: dataFilePath, atomically: true, encoding: .utf8)
+                    postSaveResult(ok: true, error: "")
+                } catch {
+                    postSaveResult(ok: false, error: error.localizedDescription)
+                }
+            } else {
+                postSaveResult(ok: false, error: "Invalid save data")
             }
         case "exportData":
             handleExport()
@@ -288,6 +294,15 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
         default:
             break
         }
+    }
+
+    private func postSaveResult(ok: Bool, error: String) {
+        webView.callAsyncJavaScript(
+            "if (window._saveResult) window._saveResult(ok, error);",
+            arguments: ["ok": ok, "error": error],
+            in: nil,
+            in: .page
+        ) { _ in }
     }
 
     // MARK: - runAction
