@@ -237,6 +237,8 @@ enum DefaultWidget {
           }
           .row:hover { background: var(--hover-bg); }
           .row:active { background: var(--active-bg); }
+          .row.search-active,
+          .row.search-active:hover { background: var(--active-bg); border-color: var(--accent); }
 
           /* Drag handle */
           .drag-handle {
@@ -602,6 +604,7 @@ enum DefaultWidget {
             var selectMode = false, selectCardId = null, selected = {};
             var editingItemId = null, editingSectionId = null;
             var searchQuery = '';
+            var activeSearchItemId = null;
 
             // Drag state
             var dragType = null, dragCardId = null, dragSectionId = null, dragItemId = null;
@@ -820,9 +823,47 @@ enum DefaultWidget {
               card.sections.forEach(function(s){ n += sectionMatchCount(s, q); });
               return n;
             }
+            function visibleSearchRows() {
+              if (!searchQ()) return [];
+              return Array.from(document.querySelectorAll('#app .row[data-item]')).filter(function(row) {
+                return row.offsetParent !== null;
+              });
+            }
+            function setActiveSearchRow(itemId, scroll) {
+              activeSearchItemId = itemId || null;
+              var activeRow = null;
+              visibleSearchRows().forEach(function(row) {
+                var isActive = !activeRow && row.dataset.item === activeSearchItemId;
+                row.classList.toggle('search-active', isActive);
+                if (isActive) activeRow = row;
+              });
+              if (scroll && activeRow) activeRow.scrollIntoView({ block: 'nearest' });
+              return activeRow;
+            }
+            function resetActiveSearchRow() {
+              var rows = visibleSearchRows();
+              setActiveSearchRow(rows.length ? rows[0].dataset.item : null, false);
+            }
+            function moveActiveSearchRow(delta) {
+              var rows = visibleSearchRows();
+              if (!rows.length) { setActiveSearchRow(null, false); return; }
+              var index = rows.findIndex(function(row) { return row.dataset.item === activeSearchItemId; });
+              if (index < 0) index = delta > 0 ? -1 : 0;
+              var next = rows[(index + delta + rows.length) % rows.length];
+              setActiveSearchRow(next.dataset.item, true);
+            }
+            function activateActiveSearchRow() {
+              var rows = visibleSearchRows();
+              var row = rows.find(function(candidate) { return candidate.dataset.item === activeSearchItemId; }) || rows[0];
+              if (row) {
+                setActiveSearchRow(row.dataset.item, false);
+                row.click();
+              }
+            }
             function clearSearch() {
               commitPendingEdit();
               searchQuery = '';
+              activeSearchItemId = null;
               var input = document.getElementById('searchInput');
               if (input) input.value = '';
               var wrap = document.getElementById('searchWrap');
@@ -872,6 +913,7 @@ enum DefaultWidget {
               }
               app.innerHTML = html;
               updateRecentsMount();
+              resetActiveSearchRow();
             }
 
             function renderTabBar() {
@@ -1007,7 +1049,8 @@ enum DefaultWidget {
                   labelHtml + valHtml + '</div>';
               }
               if (isSel) {
-                return '<div class="row row-action' + runningCls + '" onclick="toggleSelectItem(' + escHandlerArg(item.id) + ')">' +
+                return '<div class="row row-action' + runningCls + '" data-card="' + escAttr(cardId) + '" data-section="' + escAttr(sectionId) + '" data-item="' + escAttr(item.id) + '" ' +
+                  'onclick="toggleSelectItem(' + escHandlerArg(item.id) + ')">' +
                   '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
                   labelHtml + valHtml + '</div>';
               }
@@ -1033,7 +1076,8 @@ enum DefaultWidget {
                   labelHtml + valHtml + '</div>';
               }
               if (isSel) {
-                return '<div class="row row-launch' + runningCls + '" onclick="toggleSelectItem(' + escHandlerArg(item.id) + ')">' +
+                return '<div class="row row-launch' + runningCls + '" data-card="' + escAttr(cardId) + '" data-section="' + escAttr(sectionId) + '" data-item="' + escAttr(item.id) + '" ' +
+                  'onclick="toggleSelectItem(' + escHandlerArg(item.id) + ')">' +
                   '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
                   labelHtml + valHtml + '</div>';
               }
@@ -1090,7 +1134,8 @@ enum DefaultWidget {
                   '<span class="label">' + esc(item.label) + srcHtml + '</span>' + valHtml + '</div>';
               }
               if (isSel) {
-                return '<div class="row" onclick="toggleSelectItem(' + escHandlerArg(item.id) + ')">' +
+                return '<div class="row" data-card="' + escAttr(cardId) + '" data-section="' + escAttr(sectionId) + '" data-item="' + escAttr(item.id) + '" ' +
+                  'onclick="toggleSelectItem(' + escHandlerArg(item.id) + ')">' +
                   '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
                   '<span class="label">' + esc(item.label) + '</span>' + valHtml + '</div>';
               }
@@ -2155,10 +2200,12 @@ enum DefaultWidget {
             (function initSearch() {
               var input = document.getElementById('searchInput');
               var clearBtn = document.getElementById('searchClear');
+              var app = document.getElementById('app');
               if (!input) return;
               input.addEventListener('input', function(){
                 commitPendingEdit();
                 searchQuery = input.value;
+                activeSearchItemId = null;
                 // Filtering can hide the card being bulk-edited while its
                 // select-bar stays live — leave select mode instead.
                 if (selectMode && searchQuery.trim()) { selectMode = false; selectCardId = null; selected = {}; }
@@ -2166,13 +2213,22 @@ enum DefaultWidget {
                 render();
               });
               input.addEventListener('keydown', function(ev){
+                if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+                  if (!searchQ()) return;
+                  ev.preventDefault();
+                  moveActiveSearchRow(ev.key === 'ArrowDown' ? 1 : -1);
+                  return;
+                }
                 if (ev.key === 'Enter') {
                   ev.preventDefault();
                   if (selectMode) return;  // rows are selection toggles here
-                  // Copy the first visible plain entry (never run actions from Enter)
-                  var row = document.querySelector('#app .row:not(.row-action):not(.row-launch)');
-                  if (row) row.click();
+                  activateActiveSearchRow();
                 }
+              });
+              app.addEventListener('mouseover', function(ev) {
+                if (!searchQ()) return;
+                var row = ev.target.closest('.row[data-item]');
+                if (row && app.contains(row)) setActiveSearchRow(row.dataset.item, false);
               });
               clearBtn.addEventListener('click', function(){ clearSearch(); });
             })();
