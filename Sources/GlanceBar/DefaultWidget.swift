@@ -607,6 +607,117 @@ enum DefaultWidget {
             var dragType = null, dragCardId = null, dragSectionId = null, dragItemId = null;
 
             function uid() { return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
+            var SAFE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+            function isSafeId(id) { return typeof id === 'string' && SAFE_ID_RE.test(id); }
+
+            // Imported data is untrusted. Normalize entity ids before any of
+            // them can reach markup or an inline event handler, and keep every
+            // stored/live reference aligned with replacements.
+            function normalizeDataIds(root) {
+              var remap = {
+                pages: new Map(), cards: new Map(), sections: new Map(), items: new Map(), changed: false
+              };
+              var used = new Set();
+
+              function walkSections(sections, visit) {
+                (sections || []).forEach(function(section) {
+                  visit(section, remap.sections);
+                  (section.items || []).forEach(function(item) { visit(item, remap.items); });
+                  walkSections(section.sections, visit);
+                });
+              }
+              (root.pages || []).forEach(function(page) {
+                if (isSafeId(page.id)) used.add(page.id);
+                (page.cards || []).forEach(function(card) {
+                  if (isSafeId(card.id)) used.add(card.id);
+                  walkSections(card.sections, function(entity) {
+                    if (isSafeId(entity.id)) used.add(entity.id);
+                  });
+                });
+              });
+
+              function freshId() {
+                var id;
+                do { id = uid(); } while (!isSafeId(id) || used.has(id));
+                used.add(id);
+                return id;
+              }
+              function normalizeEntity(entity, map) {
+                var oldId = entity.id;
+                if (isSafeId(oldId)) return;
+                if (!map.has(oldId)) map.set(oldId, freshId());
+                entity.id = map.get(oldId);
+                remap.changed = true;
+              }
+              function mapped(map, id) { return map.has(id) ? map.get(id) : id; }
+
+              (root.pages || []).forEach(function(page) {
+                normalizeEntity(page, remap.pages);
+                (page.cards || []).forEach(function(card) {
+                  normalizeEntity(card, remap.cards);
+                  walkSections(card.sections, normalizeEntity);
+                });
+
+                // Canonicalize all three fields from the resolved entities.
+                // resolveRecent intentionally finds the real containing
+                // section, so a forged/dangling sectionId cannot survive.
+                if (page.recents) {
+                  page.recents = page.recents.filter(function(ref) {
+                    ref.cardId = mapped(remap.cards, ref.cardId);
+                    ref.sectionId = mapped(remap.sections, ref.sectionId);
+                    ref.itemId = mapped(remap.items, ref.itemId);
+                    var resolved = resolveRecent(page, ref);
+                    if (!resolved) { remap.changed = true; return false; }
+                    if (ref.cardId !== resolved.card.id || ref.sectionId !== resolved.section.id || ref.itemId !== resolved.item.id) {
+                      remap.changed = true;
+                    }
+                    ref.cardId = resolved.card.id;
+                    ref.sectionId = resolved.section.id;
+                    ref.itemId = resolved.item.id;
+                    return true;
+                  });
+                }
+              });
+              return remap;
+            }
+
+            function remapRuntimeIds(remap) {
+              function mappedOrSafe(map, id) {
+                if (id === null || typeof id === 'undefined') return id;
+                if (map.has(id)) return map.get(id);
+                return isSafeId(id) ? id : null;
+              }
+              activePageId = mappedOrSafe(remap.pages, activePageId);
+              selectCardId = mappedOrSafe(remap.cards, selectCardId);
+              editingItemId = mappedOrSafe(remap.items, editingItemId);
+              editingSectionId = mappedOrSafe(remap.sections, editingSectionId);
+              dragCardId = mappedOrSafe(remap.cards, dragCardId);
+              dragSectionId = mappedOrSafe(remap.sections, dragSectionId);
+              dragItemId = mappedOrSafe(remap.items, dragItemId);
+
+              var nextSelected = {};
+              Object.keys(selected || {}).forEach(function(key) {
+                var nextKey;
+                if (key.indexOf('sec_') === 0) {
+                  var sectionId = mappedOrSafe(remap.sections, key.slice(4));
+                  if (sectionId !== null) nextKey = 'sec_' + sectionId;
+                } else {
+                  nextKey = mappedOrSafe(remap.items, key);
+                }
+                if (nextKey !== null && typeof nextKey !== 'undefined') nextSelected[nextKey] = selected[key];
+              });
+              selected = nextSelected;
+
+              if (typeof _runningActions !== 'undefined' && _runningActions) {
+                var nextRunning = {};
+                Object.keys(_runningActions).forEach(function(key) {
+                  var nextKey = mappedOrSafe(remap.items, key);
+                  if (nextKey !== null) nextRunning[nextKey] = _runningActions[key];
+                });
+                _runningActions = nextRunning;
+              }
+            }
+
             function save() { if (window.GlanceBar) GlanceBar.saveData(data); }
             function activePage() { return data.pages.find(function(p){ return p.id === activePageId; }) || data.pages[0]; }
 
@@ -651,13 +762,16 @@ enum DefaultWidget {
 
             window._onDataLoaded = function(saved) {
               if (!saved) return;
+              var migrated = false;
               // Migrate old format: { cards: [...] } → { pages: [{ cards: [...] }] }
               if (saved.cards && !saved.pages) {
                 data = { pages: [{ id: uid(), name: 'Main', cards: saved.cards }] };
-                save();
+                migrated = true;
               } else if (saved.pages) {
                 data = saved;
               }
+              var idRemap = normalizeDataIds(data);
+              remapRuntimeIds(idRemap);
               data.pages.forEach(function(p){ if (!p.recents) p.recents = []; });
               // Legacy rename: 'trigger' → 'launch'
               data.pages.forEach(function(p){ p.cards.forEach(function(c){
@@ -668,11 +782,17 @@ enum DefaultWidget {
               }); });
               activePageId = data.pages[0] ? data.pages[0].id : null;
               window._dataLoaded = true;
+              if (migrated || idRemap.changed) save();
               render();
             };
             function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
             // For HTML attribute values (value="...") — esc() doesn't cover quotes
             function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+            // JSON supplies JavaScript string quoting; escAttr then protects
+            // the surrounding double-quoted HTML handler attribute.
+            function escHandlerArg(s) {
+              return escAttr(JSON.stringify(String(s)).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'));
+            }
             var _toastTimer = null;
             function showToast(msg, kind) {
               var t = document.getElementById('toast');
@@ -759,8 +879,8 @@ enum DefaultWidget {
               var html = '<div class="tab-bar"><div class="tab-bar-tabs">';
               data.pages.forEach(function(p) {
                 html += '<button class="tab' + (p.id===activePageId?' active':'') + '" ' +
-                  'onclick="switchPage(\'' + p.id + '\')" ' +
-                  'oncontextmenu="showTabContextMenu(event,\'' + p.id + '\')">' + esc(p.name) + '</button>';
+                  'onclick="switchPage(' + escHandlerArg(p.id) + ')" ' +
+                  'oncontextmenu="showTabContextMenu(event,' + escHandlerArg(p.id) + ')">' + esc(p.name) + '</button>';
               });
               html += '</div>';
               html += '<button class="tab-add" onclick="addPage()">+</button>';
@@ -817,14 +937,14 @@ enum DefaultWidget {
               var isSel = selectMode && selectCardId === card.id;
               var q = searchQ();
               var sections = q ? card.sections.filter(function(s){ return sectionMatchCount(s, q) > 0; }) : card.sections;
-              return '<div class="card" data-card="' + card.id + '">' +
+              return '<div class="card" data-card="' + escAttr(card.id) + '">' +
                 '<div class="card-header"><div class="card-title">' + esc(card.title) + '</div>' +
-                '<button class="card-menu-btn" onclick="showCardMenu(event,\'' + card.id + '\')">\u2026</button></div>' +
+                '<button class="card-menu-btn" onclick="showCardMenu(event,' + escHandlerArg(card.id) + ')">\u2026</button></div>' +
                 sections.map(function(s) { return renderSection(card.id, s, card.hideValues, isSel); }).join('') +
-                '<div class="card-form" id="newSectionForm_' + card.id + '" data-form-card="' + card.id + '" data-form-type="section">' +
-                '<div class="form-row"><input id="newSectionTitle_' + card.id + '" placeholder="New section name"></div></div>' +
-                '<div class="card-form" id="renameForm_' + card.id + '" data-form-card="' + card.id + '" data-form-type="rename">' +
-                '<div class="form-row"><input id="renameInput_' + card.id + '" placeholder="New name" value="' + escAttr(card.title) + '"></div></div></div>';
+                '<div class="card-form" id="newSectionForm_' + escAttr(card.id) + '" data-form-card="' + escAttr(card.id) + '" data-form-type="section">' +
+                '<div class="form-row"><input id="newSectionTitle_' + escAttr(card.id) + '" placeholder="New section name"></div></div>' +
+                '<div class="card-form" id="renameForm_' + escAttr(card.id) + '" data-form-card="' + escAttr(card.id) + '" data-form-type="rename">' +
+                '<div class="form-row"><input id="renameInput_' + escAttr(card.id) + '" placeholder="New name" value="' + escAttr(card.title) + '"></div></div></div>';
             }
 
             function renderSection(cardId, section, hideValues, isSel, depth) {
@@ -834,19 +954,19 @@ enum DefaultWidget {
               var q = searchQ();
               var childSections = section.sections || [];
               if (q) childSections = childSections.filter(function(cs){ return sectionMatchCount(cs, q) > 0; });
-              return '<div class="section' + nestedClass + '" data-section="' + section.id + '">' +
+              return '<div class="section' + nestedClass + '" data-section="' + escAttr(section.id) + '">' +
                 (editingSectionId === section.id ?
-                  '<div class="section-title-editing" data-edit-card="' + cardId + '" data-edit-sid="' + section.id + '">' +
-                    '<input id="edit_section_' + section.id + '" value="' + escAttr(section.title) + '">' +
+                  '<div class="section-title-editing" data-edit-card="' + escAttr(cardId) + '" data-edit-sid="' + escAttr(section.id) + '">' +
+                    '<input id="edit_section_' + escAttr(section.id) + '" value="' + escAttr(section.title) + '">' +
                   '</div>'
                 :
-                  '<div class="section-header" oncontextmenu="showSectionHeaderMenu(event,\'' + cardId + '\',\'' + section.id + '\')">' +
-                  (isSel ? '<div class="section-select-checkbox' + (sc?' checked':'') + '" onclick="toggleSelectSection(\'' + section.id + '\')">' + (sc?'\u2713':'') + '</div>' : '') +
+                  '<div class="section-header" oncontextmenu="showSectionHeaderMenu(event,' + escHandlerArg(cardId) + ',' + escHandlerArg(section.id) + ')">' +
+                  (isSel ? '<div class="section-select-checkbox' + (sc?' checked':'') + '" onclick="toggleSelectSection(' + escHandlerArg(section.id) + ')">' + (sc?'\u2713':'') + '</div>' : '') +
                   '<div class="section-title">' + esc(section.title) + '</div>' +
                   (isSel ? '' :
                     '<div class="section-add-group">' +
-                      '<button class="section-add-btn" onclick="showAddEntryForm(\'' + cardId + '\',\'' + section.id + '\')">+</button>' +
-                      '<button class="section-dropdown-btn" onclick="showSectionDropdown(event,\'' + cardId + '\',\'' + section.id + '\')">\u25BE</button>' +
+                      '<button class="section-add-btn" onclick="showAddEntryForm(' + escHandlerArg(cardId) + ',' + escHandlerArg(section.id) + ')">+</button>' +
+                      '<button class="section-dropdown-btn" onclick="showSectionDropdown(event,' + escHandlerArg(cardId) + ',' + escHandlerArg(section.id) + ')">\u25BE</button>' +
                     '</div>') +
                   '</div>') +
                 section.items.map(function(item, idx) {
@@ -855,21 +975,21 @@ enum DefaultWidget {
                   if (q && !itemMatches(item, q)) return '';
                   return renderRow(cardId, section.id, item, hideValues, isSel, idx);
                 }).join('') +
-                '<div class="inline-form" id="entryForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="entry">' +
-                '<input id="inp_label_' + section.id + '" placeholder="Label">' +
-                '<textarea id="inp_value_' + section.id + '" placeholder="Value" rows="1"></textarea>' +
+                '<div class="inline-form" id="entryForm_' + escAttr(section.id) + '" data-form-card="' + escAttr(cardId) + '" data-form-section="' + escAttr(section.id) + '" data-form-type="entry">' +
+                '<input id="inp_label_' + escAttr(section.id) + '" placeholder="Label">' +
+                '<textarea id="inp_value_' + escAttr(section.id) + '" placeholder="Value" rows="1"></textarea>' +
                 '</div>' +
-                '<div class="inline-form" id="actionForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="action">' +
-                '<input id="act_label_' + section.id + '" placeholder="Action label">' +
-                '<textarea id="act_command_' + section.id + '" class="action-command-field" placeholder="Shell command" rows="1"></textarea>' +
+                '<div class="inline-form" id="actionForm_' + escAttr(section.id) + '" data-form-card="' + escAttr(cardId) + '" data-form-section="' + escAttr(section.id) + '" data-form-type="action">' +
+                '<input id="act_label_' + escAttr(section.id) + '" placeholder="Action label">' +
+                '<textarea id="act_command_' + escAttr(section.id) + '" class="action-command-field" placeholder="Shell command" rows="1"></textarea>' +
                 '</div>' +
-                '<div class="inline-form" id="launchForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="launch">' +
-                '<input id="lnc_label_' + section.id + '" placeholder="Launch label">' +
-                '<textarea id="lnc_command_' + section.id + '" class="action-command-field" placeholder="~/.glancebar/scripts/your-script.sh" rows="1"></textarea>' +
+                '<div class="inline-form" id="launchForm_' + escAttr(section.id) + '" data-form-card="' + escAttr(cardId) + '" data-form-section="' + escAttr(section.id) + '" data-form-type="launch">' +
+                '<input id="lnc_label_' + escAttr(section.id) + '" placeholder="Launch label">' +
+                '<textarea id="lnc_command_' + escAttr(section.id) + '" class="action-command-field" placeholder="~/.glancebar/scripts/your-script.sh" rows="1"></textarea>' +
                 '</div>' +
                 childSections.map(function(cs) { return renderSection(cardId, cs, hideValues, isSel, depth + 1); }).join('') +
-                '<div class="card-form" id="newSubsectionForm_' + section.id + '" data-form-card="' + cardId + '" data-form-section="' + section.id + '" data-form-type="subsection">' +
-                '<div class="form-row"><input id="newSubsectionTitle_' + section.id + '" placeholder="New subsection name"></div></div>' +
+                '<div class="card-form" id="newSubsectionForm_' + escAttr(section.id) + '" data-form-card="' + escAttr(cardId) + '" data-form-section="' + escAttr(section.id) + '" data-form-type="subsection">' +
+                '<div class="form-row"><input id="newSubsectionTitle_' + escAttr(section.id) + '" placeholder="New subsection name"></div></div>' +
                 '</div>';
             }
 
@@ -881,20 +1001,20 @@ enum DefaultWidget {
               var runningCls = _runningActions[item.id] ? ' running' : '';
 
               if (isRecent) {
-                return '<div class="row row-action recent-row' + runningCls + '" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
-                  'onclick="runActionById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',true)" ' +
-                  'oncontextmenu="showRecentMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
+                return '<div class="row row-action recent-row' + runningCls + '" data-card="' + escAttr(cardId) + '" data-section="' + escAttr(sectionId) + '" data-item="' + escAttr(item.id) + '" ' +
+                  'onclick="runActionById(this,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ',true)" ' +
+                  'oncontextmenu="showRecentMenu(event,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ')">' +
                   labelHtml + valHtml + '</div>';
               }
               if (isSel) {
-                return '<div class="row row-action' + runningCls + '" onclick="toggleSelectItem(\'' + item.id + '\')">' +
+                return '<div class="row row-action' + runningCls + '" onclick="toggleSelectItem(' + escHandlerArg(item.id) + ')">' +
                   '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
                   labelHtml + valHtml + '</div>';
               }
-              return '<div class="row row-action' + runningCls + '" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" data-idx="' + idx + '" ' +
+              return '<div class="row row-action' + runningCls + '" draggable="true" data-card="' + escAttr(cardId) + '" data-section="' + escAttr(sectionId) + '" data-item="' + escAttr(item.id) + '" data-idx="' + idx + '" ' +
                 'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
-                'onclick="runActionById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',false)" ' +
-                'oncontextmenu="showEntryMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
+                'onclick="runActionById(this,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ',false)" ' +
+                'oncontextmenu="showEntryMenu(event,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ')">' +
                 '<span class="drag-handle">\u2630</span>' +
                 labelHtml + valHtml + '</div>';
             }
@@ -907,20 +1027,20 @@ enum DefaultWidget {
               var runningCls = _runningActions[item.id] ? ' running' : '';
 
               if (isRecent) {
-                return '<div class="row row-launch recent-row' + runningCls + '" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
-                  'onclick="runLaunchById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',true)" ' +
-                  'oncontextmenu="showRecentMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
+                return '<div class="row row-launch recent-row' + runningCls + '" data-card="' + escAttr(cardId) + '" data-section="' + escAttr(sectionId) + '" data-item="' + escAttr(item.id) + '" ' +
+                  'onclick="runLaunchById(this,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ',true)" ' +
+                  'oncontextmenu="showRecentMenu(event,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ')">' +
                   labelHtml + valHtml + '</div>';
               }
               if (isSel) {
-                return '<div class="row row-launch' + runningCls + '" onclick="toggleSelectItem(\'' + item.id + '\')">' +
+                return '<div class="row row-launch' + runningCls + '" onclick="toggleSelectItem(' + escHandlerArg(item.id) + ')">' +
                   '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
                   labelHtml + valHtml + '</div>';
               }
-              return '<div class="row row-launch' + runningCls + '" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" data-idx="' + idx + '" ' +
+              return '<div class="row row-launch' + runningCls + '" draggable="true" data-card="' + escAttr(cardId) + '" data-section="' + escAttr(sectionId) + '" data-item="' + escAttr(item.id) + '" data-idx="' + idx + '" ' +
                 'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
-                'onclick="runLaunchById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',false)" ' +
-                'oncontextmenu="showEntryMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
+                'onclick="runLaunchById(this,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ',false)" ' +
+                'oncontextmenu="showEntryMenu(event,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ')">' +
                 '<span class="drag-handle">\u2630</span>' +
                 labelHtml + valHtml + '</div>';
             }
@@ -934,9 +1054,9 @@ enum DefaultWidget {
                 var content = (item.type === 'action' || item.type === 'launch') ? (item.command || '') : (item.value || '');
                 var rowsN = Math.min(content.split('\n').length, 4);
                 var fieldCls = (item.type === 'action' || item.type === 'launch') ? ' class="action-command-field"' : '';
-                return '<div class="row-editing" data-edit-card="' + cardId + '" data-edit-section="' + sectionId + '" data-edit-item="' + item.id + '">' +
-                  '<input id="edit_label_' + item.id + '" value="' + escAttr(item.label) + '">' +
-                  '<textarea id="edit_value_' + item.id + '" rows="' + rowsN + '"' + fieldCls + '>' + esc(content) + '</textarea>' +
+                return '<div class="row-editing" data-edit-card="' + escAttr(cardId) + '" data-edit-section="' + escAttr(sectionId) + '" data-edit-item="' + escAttr(item.id) + '">' +
+                  '<input id="edit_label_' + escAttr(item.id) + '" value="' + escAttr(item.label) + '">' +
+                  '<textarea id="edit_value_' + escAttr(item.id) + '" rows="' + rowsN + '"' + fieldCls + '>' + esc(content) + '</textarea>' +
                   '</div>';
               }
 
@@ -964,20 +1084,20 @@ enum DefaultWidget {
               }
               if (isRecent) {
                 var srcHtml = recentSuffix ? '<span class="recent-source">' + esc(recentSuffix) + '</span>' : '';
-                return '<div class="row recent-row" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" ' +
-                  'onclick="copyById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',' + hidden + ',true)" ' +
-                  'oncontextmenu="showRecentMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
+                return '<div class="row recent-row" data-card="' + escAttr(cardId) + '" data-section="' + escAttr(sectionId) + '" data-item="' + escAttr(item.id) + '" ' +
+                  'onclick="copyById(this,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ',' + hidden + ',true)" ' +
+                  'oncontextmenu="showRecentMenu(event,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ')">' +
                   '<span class="label">' + esc(item.label) + srcHtml + '</span>' + valHtml + '</div>';
               }
               if (isSel) {
-                return '<div class="row" onclick="toggleSelectItem(\'' + item.id + '\')">' +
+                return '<div class="row" onclick="toggleSelectItem(' + escHandlerArg(item.id) + ')">' +
                   '<div class="select-checkbox' + (chk?' checked':'') + '">' + (chk?'\u2713':'') + '</div>' +
                   '<span class="label">' + esc(item.label) + '</span>' + valHtml + '</div>';
               }
-              return '<div class="row" draggable="true" data-card="' + cardId + '" data-section="' + sectionId + '" data-item="' + item.id + '" data-idx="' + idx + '" ' +
+              return '<div class="row" draggable="true" data-card="' + escAttr(cardId) + '" data-section="' + escAttr(sectionId) + '" data-item="' + escAttr(item.id) + '" data-idx="' + idx + '" ' +
                 'ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" ' +
-                'onclick="copyById(this,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\',' + hidden + ')" ' +
-                'oncontextmenu="showEntryMenu(event,\'' + cardId + '\',\'' + sectionId + '\',\'' + item.id + '\')">' +
+                'onclick="copyById(this,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ',' + hidden + ')" ' +
+                'oncontextmenu="showEntryMenu(event,' + escHandlerArg(cardId) + ',' + escHandlerArg(sectionId) + ',' + escHandlerArg(item.id) + ')">' +
                 '<span class="drag-handle">\u2630</span>' +
                 '<span class="label">' + esc(item.label) + '</span>' + valHtml + '</div>';
             }
@@ -1691,14 +1811,14 @@ enum DefaultWidget {
               var item = sec && sec.items.find(function(i){ return i.id === iid; });
               var m = document.getElementById('contextMenu');
               var html =
-                '<div class="context-menu-item" onclick="startEditItem(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Edit</div>' +
-                '<div class="context-menu-item" onclick="duplicateEntry(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Duplicate</div>';
+                '<div class="context-menu-item" onclick="startEditItem('+escHandlerArg(cid)+','+escHandlerArg(sid)+','+escHandlerArg(iid)+')">Edit</div>' +
+                '<div class="context-menu-item" onclick="duplicateEntry('+escHandlerArg(cid)+','+escHandlerArg(sid)+','+escHandlerArg(iid)+')">Duplicate</div>';
               if (item && !item.type) {
-                html += '<div class="context-menu-item" onclick="toggleItemHide(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Hide Value <div class="context-menu-toggle'+(item.hide?' on':'')+'"></div></div>';
+                html += '<div class="context-menu-item" onclick="toggleItemHide('+escHandlerArg(cid)+','+escHandlerArg(sid)+','+escHandlerArg(iid)+')">Hide Value <div class="context-menu-toggle'+(item.hide?' on':'')+'"></div></div>';
               }
               html +=
                 '<div class="context-menu-sep"></div>' +
-                '<div class="context-menu-item danger" onclick="deleteOneEntry(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Delete</div>';
+                '<div class="context-menu-item danger" onclick="deleteOneEntry('+escHandlerArg(cid)+','+escHandlerArg(sid)+','+escHandlerArg(iid)+')">Delete</div>';
               m.innerHTML = html;
               placeMenu(m, e.clientX, e.clientY+4);
             }
@@ -1740,9 +1860,9 @@ enum DefaultWidget {
               e.preventDefault(); e.stopPropagation();
               var m = document.getElementById('contextMenu');
               m.innerHTML =
-                '<div class="context-menu-item" onclick="startEditItem(\''+cid+'\',\''+sid+'\',\''+iid+'\')">Edit</div>' +
+                '<div class="context-menu-item" onclick="startEditItem('+escHandlerArg(cid)+','+escHandlerArg(sid)+','+escHandlerArg(iid)+')">Edit</div>' +
                 '<div class="context-menu-sep"></div>' +
-                '<div class="context-menu-item" onclick="removeFromRecents(\''+iid+'\')">Remove from Recents</div>';
+                '<div class="context-menu-item" onclick="removeFromRecents('+escHandlerArg(iid)+')">Remove from Recents</div>';
               placeMenu(m, e.clientX, e.clientY+4);
             }
             function removeFromRecents(iid) {
@@ -1771,13 +1891,13 @@ enum DefaultWidget {
               e.preventDefault(); e.stopPropagation();
               var m = document.getElementById('contextMenu');
               m.innerHTML =
-                '<div class="context-menu-item" onclick="startEditSection(\''+cid+'\',\''+sid+'\')">Rename Section</div>' +
-                '<div class="context-menu-item" onclick="showAddEntryForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Entry</div>' +
-                '<div class="context-menu-item" onclick="showAddActionForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Action</div>' +
-                '<div class="context-menu-item" onclick="showAddLaunchForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Launch</div>' +
-                '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>' +
+                '<div class="context-menu-item" onclick="startEditSection('+escHandlerArg(cid)+','+escHandlerArg(sid)+')">Rename Section</div>' +
+                '<div class="context-menu-item" onclick="showAddEntryForm('+escHandlerArg(cid)+','+escHandlerArg(sid)+');hideContextMenu()">Add Entry</div>' +
+                '<div class="context-menu-item" onclick="showAddActionForm('+escHandlerArg(cid)+','+escHandlerArg(sid)+');hideContextMenu()">Add Action</div>' +
+                '<div class="context-menu-item" onclick="showAddLaunchForm('+escHandlerArg(cid)+','+escHandlerArg(sid)+');hideContextMenu()">Add Launch</div>' +
+                '<div class="context-menu-item" onclick="showSubsectionForm('+escHandlerArg(cid)+','+escHandlerArg(sid)+')">Add Subsection</div>' +
                 '<div class="context-menu-sep"></div>' +
-                '<div class="context-menu-item danger" onclick="deleteSection(\''+cid+'\',\''+sid+'\')">Delete Section</div>';
+                '<div class="context-menu-item danger" onclick="deleteSection('+escHandlerArg(cid)+','+escHandlerArg(sid)+')">Delete Section</div>';
               placeMenu(m, e.clientX, e.clientY+4);
             }
             function countSectionContents(s) {
@@ -1820,10 +1940,10 @@ enum DefaultWidget {
               e.stopPropagation();
               var m = document.getElementById('contextMenu');
               m.innerHTML =
-                '<div class="context-menu-item" onclick="showAddEntryForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Entry</div>' +
-                '<div class="context-menu-item" onclick="showAddActionForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Action</div>' +
-                '<div class="context-menu-item" onclick="showAddLaunchForm(\''+cid+'\',\''+sid+'\');hideContextMenu()">Add Launch</div>' +
-                '<div class="context-menu-item" onclick="showSubsectionForm(\''+cid+'\',\''+sid+'\')">Add Subsection</div>';
+                '<div class="context-menu-item" onclick="showAddEntryForm('+escHandlerArg(cid)+','+escHandlerArg(sid)+');hideContextMenu()">Add Entry</div>' +
+                '<div class="context-menu-item" onclick="showAddActionForm('+escHandlerArg(cid)+','+escHandlerArg(sid)+');hideContextMenu()">Add Action</div>' +
+                '<div class="context-menu-item" onclick="showAddLaunchForm('+escHandlerArg(cid)+','+escHandlerArg(sid)+');hideContextMenu()">Add Launch</div>' +
+                '<div class="context-menu-item" onclick="showSubsectionForm('+escHandlerArg(cid)+','+escHandlerArg(sid)+')">Add Subsection</div>';
               var r = e.target.getBoundingClientRect();
               placeMenu(m, r.right - 150, r.bottom+4);
             }
@@ -1950,13 +2070,13 @@ enum DefaultWidget {
               var c = activePage().cards.find(function(x){return x.id===cid;});
               var m = document.getElementById('contextMenu');
               m.innerHTML =
-                '<div class="context-menu-item" onclick="toggleHideValues(\''+cid+'\')">Hide Values <div class="context-menu-toggle'+(c&&c.hideValues?' on':'')+'"></div></div>' +
+                '<div class="context-menu-item" onclick="toggleHideValues('+escHandlerArg(cid)+')">Hide Values <div class="context-menu-toggle'+(c&&c.hideValues?' on':'')+'"></div></div>' +
                 '<div class="context-menu-sep"></div>' +
-                '<div class="context-menu-item" onclick="showNewSectionForm(\''+cid+'\')">Add Section</div>' +
-                '<div class="context-menu-item" onclick="showRenameForm(\''+cid+'\')">Rename Card</div>' +
-                '<div class="context-menu-item" onclick="enterSelectMode(\''+cid+'\')">Select &amp; Delete Items</div>' +
+                '<div class="context-menu-item" onclick="showNewSectionForm('+escHandlerArg(cid)+')">Add Section</div>' +
+                '<div class="context-menu-item" onclick="showRenameForm('+escHandlerArg(cid)+')">Rename Card</div>' +
+                '<div class="context-menu-item" onclick="enterSelectMode('+escHandlerArg(cid)+')">Select &amp; Delete Items</div>' +
                 '<div class="context-menu-sep"></div>' +
-                '<div class="context-menu-item danger" onclick="deleteCard(\''+cid+'\')">Delete Card</div>';
+                '<div class="context-menu-item danger" onclick="deleteCard('+escHandlerArg(cid)+')">Delete Card</div>';
               var r = e.target.getBoundingClientRect();
               placeMenu(m, r.left, r.bottom+4);
             }
@@ -1965,10 +2085,10 @@ enum DefaultWidget {
               var page = data.pages.find(function(p){ return p.id === pageId; });
               if (!page) return;
               var m = document.getElementById('contextMenu');
-              var html = '<div class="context-menu-item" onclick="startRenameTabById(\''+pageId+'\');hideContextMenu()">Rename</div>';
+              var html = '<div class="context-menu-item" onclick="startRenameTabById('+escHandlerArg(pageId)+');hideContextMenu()">Rename</div>';
               if (data.pages.length > 1) {
                 html += '<div class="context-menu-sep"></div>';
-                html += '<div class="context-menu-item danger" onclick="deletePage(\''+pageId+'\');hideContextMenu()">Delete</div>';
+                html += '<div class="context-menu-item danger" onclick="deletePage('+escHandlerArg(pageId)+');hideContextMenu()">Delete</div>';
               }
               m.innerHTML = html;
               var r = e.target.getBoundingClientRect();
