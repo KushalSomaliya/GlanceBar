@@ -1,9 +1,66 @@
 import AppKit
+import Darwin
 import WebKit
 
 class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+    private final class ActionExecutionState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var timedOut = false
+        private var finished = false
+
+        func timeOut(_ process: Process) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+
+            guard !finished, process.isRunning else { return false }
+            // Process shares GlanceBar's process group, so signal only its direct PID.
+            guard kill(process.processIdentifier, SIGTERM) == 0 else { return false }
+            timedOut = true
+            return true
+        }
+
+        func killIfRunning(_ process: Process) {
+            lock.lock()
+            defer { lock.unlock() }
+
+            if timedOut && !finished && process.isRunning {
+                _ = kill(process.processIdentifier, SIGKILL)
+            }
+        }
+
+        func finish() -> Bool {
+            lock.lock()
+            finished = true
+            let didTimeOut = timedOut
+            lock.unlock()
+            return didTimeOut
+        }
+    }
+
+    private final class CappedOutput: @unchecked Sendable {
+        private(set) var data = Data()
+        private(set) var wasTruncated = false
+
+        func drain(_ handle: FileHandle, limit: Int) {
+            while true {
+                guard let chunk = try? handle.read(upToCount: 64 * 1024),
+                    !chunk.isEmpty
+                else { return }
+
+                let remaining = max(0, limit - data.count)
+                if remaining > 0 {
+                    data.append(contentsOf: chunk.prefix(remaining))
+                }
+                if chunk.count > remaining {
+                    wasTruncated = true
+                }
+            }
+        }
+    }
+
     let webView: WKWebView
     private let preferencesManager: PreferencesManager
+    private var allowsAboutBlankNavigation = false
 
     /// Invoked when legacy widget HTML posts a 'runUpdate' message (old
     /// in-page banner). The native banner drives updates through
@@ -13,6 +70,13 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
     private var dataFilePath: String {
         let dir = AppConstants.defaultWidgetDirectory.path
         return "\(dir)/data.json"
+    }
+
+    private var widgetDirectoryURL: URL {
+        return URL(fileURLWithPath: preferencesManager.widgetFilePath)
+            .deletingLastPathComponent()
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
     }
 
     private static let bridgeScript = WKUserScript(
@@ -79,8 +143,10 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
         let accessDirectory = fileURL.deletingLastPathComponent()
 
         if FileManager.default.fileExists(atPath: filePath) {
+            allowsAboutBlankNavigation = false
             webView.loadFileURL(fileURL, allowingReadAccessTo: accessDirectory)
         } else {
+            allowsAboutBlankNavigation = true
             webView.loadHTMLString(
                 "<html><body style='color:white;font-family:system-ui;padding:20px;'>"
                     + "<h2>No widget file found</h2>"
@@ -93,6 +159,53 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
 
     func reload() {
         loadWidget()
+    }
+
+    private func isWidgetURL(_ url: URL) -> Bool {
+        let host = url.host?.lowercased()
+        guard url.isFileURL, host == nil || host == "" || host == "localhost" else {
+            return false
+        }
+
+        let directoryComponents = widgetDirectoryURL.pathComponents
+        let urlComponents = url.standardizedFileURL
+            .resolvingSymlinksInPath()
+            .pathComponents
+        return urlComponents.starts(with: directoryComponents)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+
+        if isWidgetURL(url) {
+            decisionHandler(.allow)
+            return
+        }
+
+        if allowsAboutBlankNavigation,
+            navigationAction.targetFrame?.isMainFrame == true,
+            url.absoluteString == "about:blank"
+        {
+            allowsAboutBlankNavigation = false
+            decisionHandler(.allow)
+            return
+        }
+
+        if navigationAction.navigationType == .linkActivated,
+            let scheme = url.scheme?.lowercased(),
+            scheme == "http" || scheme == "https"
+        {
+            NSWorkspace.shared.open(url)
+        }
+
+        decisionHandler(.cancel)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -136,7 +249,11 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard let body = message.body as? [String: Any],
+        guard message.frameInfo.isMainFrame,
+            message.frameInfo.securityOrigin.protocol == "file",
+            let sourceURL = message.frameInfo.request.url,
+            isWidgetURL(sourceURL),
+            let body = message.body as? [String: Any],
             let action = body["action"] as? String
         else { return }
 
@@ -176,53 +293,70 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
     // MARK: - runAction
 
     private func runAction(id: String, command: String, timeout: Double) {
+        guard timeout.isFinite else {
+            postActionResult(id: id, payload: ["ok": false, "error": "Invalid timeout"])
+            return
+        }
+        let timeout = min(max(timeout, 1), 300)
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", command]
+            var environment = ProcessInfo.processInfo.environment
+            let shell = environment["SHELL"].flatMap { $0.isEmpty ? nil : $0 } ?? "/bin/zsh"
+            let requiredPaths = ["/opt/homebrew/bin", "/usr/local/bin"]
+            let existingPaths = (environment["PATH"] ?? "")
+                .split(separator: ":")
+                .map(String.init)
+                .filter { !requiredPaths.contains($0) }
+            environment["PATH"] = (requiredPaths + existingPaths).joined(separator: ":")
+            process.executableURL = URL(fileURLWithPath: shell)
+            // Finder/LaunchServices supplies only a minimal PATH, while setup is split across .zprofile (Homebrew) and .zshrc (nvm), so use an interactive login shell.
+            process.arguments = ["-l", "-i", "-c", command]
+            process.environment = environment
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
-            var timedOut = false
-            let timeoutWork = DispatchWorkItem {
-                if process.isRunning {
-                    timedOut = true
-                    process.terminate()
-                }
-            }
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutWork)
+            let executionState = ActionExecutionState()
 
             do {
                 try process.run()
+                let timeoutWork = DispatchWorkItem {
+                    if executionState.timeOut(process) {
+                        DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                            executionState.killIfRunning(process)
+                        }
+                    }
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutWork)
 
-                // Drain both pipes concurrently BEFORE waiting: a command
-                // whose output fills a pipe buffer (64KB) would otherwise
-                // block forever against waitUntilExit.
-                var stdoutData = Data()
-                var stderrData = Data()
+                // Keep draining after the cap so the child cannot block on a full pipe.
+                let stdoutOutput = CappedOutput()
+                let stderrOutput = CappedOutput()
+                let outputLimit = 1_048_576
                 let drainGroup = DispatchGroup()
                 drainGroup.enter()
                 DispatchQueue.global().async {
-                    stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                    stdoutOutput.drain(stdoutPipe.fileHandleForReading, limit: outputLimit)
                     drainGroup.leave()
                 }
                 drainGroup.enter()
                 DispatchQueue.global().async {
-                    stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                    stderrOutput.drain(stderrPipe.fileHandleForReading, limit: outputLimit)
                     drainGroup.leave()
                 }
 
                 process.waitUntilExit()
+                let timedOut = executionState.finish()
                 drainGroup.wait()
                 timeoutWork.cancel()
 
-                let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
-                let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+                let stdout = String(data: stdoutOutput.data, encoding: .utf8) ?? ""
+                let stderr = String(data: stderrOutput.data, encoding: .utf8) ?? ""
                 let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                let payload: [String: Any]
+                var payload: [String: Any]
                 if timedOut {
                     payload = ["ok": false, "error": "Timed out after \(Int(timeout))s"]
                 } else if process.terminationStatus != 0 {
@@ -232,12 +366,17 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
                 } else {
                     payload = ["ok": true, "stdout": trimmed]
                 }
+                if stdoutOutput.wasTruncated {
+                    payload["stdoutTruncated"] = true
+                }
+                if stderrOutput.wasTruncated {
+                    payload["stderrTruncated"] = true
+                }
 
                 DispatchQueue.main.async { [weak self] in
                     self?.postActionResult(id: id, payload: payload)
                 }
             } catch {
-                timeoutWork.cancel()
                 DispatchQueue.main.async { [weak self] in
                     self?.postActionResult(id: id, payload: ["ok": false, "error": error.localizedDescription])
                 }
@@ -303,11 +442,23 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
 
         if FileManager.default.fileExists(atPath: dataFilePath) {
             let backupPath = dataFilePath + ".bak"
-            try? FileManager.default.removeItem(atPath: backupPath)
-            try? FileManager.default.copyItem(atPath: dataFilePath, toPath: backupPath)
+            do {
+                if FileManager.default.fileExists(atPath: backupPath) {
+                    try FileManager.default.removeItem(atPath: backupPath)
+                }
+                try FileManager.default.copyItem(atPath: dataFilePath, toPath: backupPath)
+            } catch {
+                showToast("Import failed: could not back up existing data: \(error.localizedDescription)", error: true)
+                return
+            }
         }
 
-        try? jsonString.write(toFile: dataFilePath, atomically: true, encoding: .utf8)
+        do {
+            try jsonString.write(toFile: dataFilePath, atomically: true, encoding: .utf8)
+        } catch {
+            showToast("Import failed: could not write imported data: \(error.localizedDescription)", error: true)
+            return
+        }
         // Reload widget to pick up new data
         reload()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
