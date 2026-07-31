@@ -805,6 +805,13 @@ enum DefaultWidget {
               if (_toastTimer) clearTimeout(_toastTimer);
               _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, kind === 'error' ? 2500 : 1500);
             }
+            window._saveResult = function(ok, error) {
+              try {
+                if (ok === true) return;
+                var message = (typeof error === 'string' && error.trim()) || 'Failed to save widget data';
+                showToast(message, 'error');
+              } catch (_) {}
+            };
 
             // ===== SEARCH =====
             function searchQ() { return searchQuery.trim().toLowerCase(); }
@@ -877,6 +884,7 @@ enum DefaultWidget {
 
             // ===== RENDER =====
             function render() {
+              commitScheduledBlur();
               if (!activePageId && data.pages.length) activePageId = data.pages[0].id;
               var page = activePage();
               var app = document.getElementById('app');
@@ -1620,15 +1628,15 @@ enum DefaultWidget {
                 var valueEl = document.getElementById('inp_value_'+sid);
                 labelEl.focus();
                 installBulkPaste(labelEl, cid, sid);
-                installFormBlur([labelEl, valueEl], function(){ return submitEntry(cid, sid); }, function(){ hideAddEntryForm(sid); });
+                installFormBlur([labelEl, valueEl], function(values){ return submitEntry(cid, sid, values); }, function(){ hideAddEntryForm(sid); });
               },50);
             }
             function hideAddEntryForm(sid) {
               var form = document.getElementById('entryForm_'+sid);
               if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input,textarea'); inputs.forEach(function(i){i.value='';}); }
             }
-            function submitEntry(cid, sid) {
-              var l = document.getElementById('inp_label_'+sid).value.trim(), v = document.getElementById('inp_value_'+sid).value.trim();
+            function submitEntry(cid, sid, values) {
+              var l = values[0], v = values[1];
               if (!l||!v) return false;
               var s = findSectionInCard(cid, sid);
               if (s) { s.items.push({id:uid(),label:l,value:v}); save(); render(); }
@@ -1641,16 +1649,16 @@ enum DefaultWidget {
                 var labelEl = document.getElementById('act_label_'+sid);
                 var cmdEl = document.getElementById('act_command_'+sid);
                 labelEl.focus();
-                installFormBlur([labelEl, cmdEl], function(){ return submitAction(cid, sid); }, function(){ hideAddActionForm(sid); });
+                installFormBlur([labelEl, cmdEl], function(values){ return submitAction(cid, sid, values); }, function(){ hideAddActionForm(sid); });
               },50);
             }
             function hideAddActionForm(sid) {
               var form = document.getElementById('actionForm_'+sid);
               if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input,textarea'); inputs.forEach(function(i){i.value='';}); }
             }
-            function submitAction(cid, sid) {
-              var l = document.getElementById('act_label_'+sid).value.trim();
-              var c = document.getElementById('act_command_'+sid).value.trim();
+            function submitAction(cid, sid, values) {
+              var l = values[0];
+              var c = values[1];
               if (!l||!c) return false;
               var s = findSectionInCard(cid, sid);
               if (s) { s.items.push({id:uid(),type:'action',label:l,command:c}); save(); render(); }
@@ -1663,16 +1671,16 @@ enum DefaultWidget {
                 var labelEl = document.getElementById('lnc_label_'+sid);
                 var cmdEl = document.getElementById('lnc_command_'+sid);
                 labelEl.focus();
-                installFormBlur([labelEl, cmdEl], function(){ return submitLaunch(cid, sid); }, function(){ hideAddLaunchForm(sid); });
+                installFormBlur([labelEl, cmdEl], function(values){ return submitLaunch(cid, sid, values); }, function(){ hideAddLaunchForm(sid); });
               },50);
             }
             function hideAddLaunchForm(sid) {
               var form = document.getElementById('launchForm_'+sid);
               if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input,textarea'); inputs.forEach(function(i){i.value='';}); }
             }
-            function submitLaunch(cid, sid) {
-              var l = document.getElementById('lnc_label_'+sid).value.trim();
-              var c = document.getElementById('lnc_command_'+sid).value.trim();
+            function submitLaunch(cid, sid, values) {
+              var l = values[0];
+              var c = values[1];
               if (!l||!c) return false;
               var s = findSectionInCard(cid, sid);
               if (s) { s.items.push({id:uid(),type:'launch',label:l,command:c}); save(); render(); }
@@ -1684,15 +1692,15 @@ enum DefaultWidget {
               setTimeout(function(){
                 var el = document.getElementById('newSectionTitle_'+cid);
                 el.focus();
-                installFormBlur([el], function(){ submitNewSection(cid); }, function(){ hideNewSectionForm(cid); });
+                installFormBlur([el], function(values){ submitNewSection(cid, values); }, function(){ hideNewSectionForm(cid); });
               },50);
             }
             function hideNewSectionForm(cid) {
               var form = document.getElementById('newSectionForm_'+cid);
               if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input'); inputs.forEach(function(i){i.value='';}); }
             }
-            function submitNewSection(cid) {
-              var t = document.getElementById('newSectionTitle_'+cid).value.trim(); if (!t) return;
+            function submitNewSection(cid, values) {
+              var t = values[0]; if (!t) return;
               var c = activePage().cards.find(function(x){return x.id===cid;});
               if (c) { c.sections.push({id:uid(),title:t,items:[],sections:[]}); save(); render(); }
             }
@@ -1704,21 +1712,24 @@ enum DefaultWidget {
               setTimeout(function(){
                 var el = document.getElementById('newSubsectionTitle_'+sid);
                 el.focus();
-                installFormBlur([el], function(){ submitSubsection(cid, sid); }, function(){ hideSubsectionForm(sid); });
+                installFormBlur([el], function(values){ submitSubsection(cid, sid, values); }, function(){ hideSubsectionForm(sid); });
               },50);
             }
             function hideSubsectionForm(sid) {
               var form = document.getElementById('newSubsectionForm_'+sid);
               if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input'); inputs.forEach(function(i){i.value='';}); }
             }
-            function submitSubsection(cid, sid) {
-              var t = document.getElementById('newSubsectionTitle_'+sid).value.trim(); if (!t) return;
+            function submitSubsection(cid, sid, values) {
+              var t = values[0]; if (!t) return;
               var s = findSectionInCard(cid, sid);
               if (s) { if (!s.sections) s.sections = []; s.sections.push({id:uid(),title:t,items:[],sections:[]}); save(); render(); }
             }
 
             // INLINE EDIT
             var editBlurTimeout = null;
+            var formBlurTimeout = null;
+            var pendingEditCommit = null;
+            var pendingFormCommit = null;
 
             function startEditItem(cid, sid, iid) {
               hideContextMenu();
@@ -1731,30 +1742,31 @@ enum DefaultWidget {
                   labelEl.closest('.row-editing').scrollIntoView({ block: 'nearest' });
                   labelEl.focus();
                 }
-                installEditBlur([labelEl, valueEl], function(){ trySaveEditItem(cid,sid,iid); });
+                installEditBlur([labelEl, valueEl], function(values){ trySaveEditItem(cid,sid,iid,values); });
               }, 50);
             }
             // Harvest an in-progress inline edit before an unrelated render()
             // rebuilds the DOM — otherwise the typed text is silently lost and
             // a stuck "ghost" edit row can survive across page switches.
             function commitPendingEdit() {
+              commitScheduledBlur();
               if (editingItemId) {
                 var row = document.querySelector('.row-editing');
-                if (row) trySaveEditItem(row.dataset.editCard, row.dataset.editSection, row.dataset.editItem);
+                if (row) {
+                  trySaveEditItem(row.dataset.editCard, row.dataset.editSection, row.dataset.editItem,
+                    captureValues([row.querySelector('input'), row.querySelector('textarea')]));
+                }
                 else editingItemId = null;
               }
               if (editingSectionId) {
                 var sec = document.querySelector('.section-title-editing');
-                if (sec) trySaveEditSection(sec.dataset.editCard, sec.dataset.editSid);
+                if (sec) trySaveEditSection(sec.dataset.editCard, sec.dataset.editSid, captureValues([sec.querySelector('input')]));
                 else editingSectionId = null;
               }
             }
 
-            function trySaveEditItem(cid, sid, iid) {
-              var labelEl = document.getElementById('edit_label_'+iid);
-              var valueEl = document.getElementById('edit_value_'+iid);
-              if (!labelEl || !valueEl) { editingItemId = null; return; }
-              var l = labelEl.value.trim(), v = valueEl.value.trim();
+            function trySaveEditItem(cid, sid, iid, values) {
+              var l = values[0], v = values[1];
               if (l && v) {
                 var sec = findSectionInCard(cid, sid);
                 if (sec) {
@@ -1767,7 +1779,8 @@ enum DefaultWidget {
                 }
                 save();
               }
-              editingItemId = null; render();
+              if (editingItemId === iid) editingItemId = null;
+              render();
             }
             function startEditSection(cid, sid) {
               hideContextMenu();
@@ -1776,20 +1789,59 @@ enum DefaultWidget {
               setTimeout(function(){
                 var el = document.getElementById('edit_section_'+sid);
                 if(el){ el.focus(); el.select(); }
-                installEditBlur([el], function(){ trySaveEditSection(cid,sid); });
+                installEditBlur([el], function(values){ trySaveEditSection(cid,sid,values); });
               }, 50);
             }
-            function trySaveEditSection(cid, sid) {
-              var el = document.getElementById('edit_section_'+sid);
-              if (!el) { editingSectionId = null; return; }
-              var t = el.value.trim();
+            function trySaveEditSection(cid, sid, values) {
+              var t = values[0];
               if (t) { var sec = findSectionInCard(cid,sid); if(sec) sec.title=t; save(); }
-              editingSectionId = null; render();
+              if (editingSectionId === sid) editingSectionId = null;
+              render();
             }
-            function cancelEdit() { window._escCancel = true; editingItemId = null; editingSectionId = null; render(); }
+            function cancelEdit() {
+              window._escCancel = true;
+              if (editBlurTimeout) clearTimeout(editBlurTimeout);
+              editBlurTimeout = null;
+              pendingEditCommit = null;
+              editingItemId = null; editingSectionId = null; render();
+            }
 
-            var formBlurTimeout = null;
+            // Deferred commits retain only strings, so render() can replace
+            // the form without changing which values are validated or saved.
+            function captureValues(elements) {
+              return elements.map(function(el){
+                return el && typeof el.value === 'string' ? el.value.trim() : '';
+              });
+            }
+
+            function commitScheduledBlur() {
+              if (pendingFormCommit) {
+                var formCommit = pendingFormCommit;
+                pendingFormCommit = null;
+                if (formBlurTimeout) clearTimeout(formBlurTimeout);
+                formBlurTimeout = null;
+                if (window._escCancel) {
+                  window._escCancel = false;
+                  formCommit.cancelFn();
+                } else if (!formCommit.values.some(function(value){ return value; })) {
+                  formCommit.cancelFn();
+                } else if (formCommit.saveFn(formCommit.values) === false) {
+                  formCommit.cancelFn();
+                  showToast('Not saved — required fields missing', 'error');
+                }
+              }
+              if (pendingEditCommit) {
+                var editCommit = pendingEditCommit;
+                pendingEditCommit = null;
+                if (editBlurTimeout) clearTimeout(editBlurTimeout);
+                editBlurTimeout = null;
+                if (window._escCancel) window._escCancel = false;
+                else editCommit.saveFn(editCommit.values);
+              }
+            }
+
             function installFormBlur(elements, saveFn, cancelFn) {
+              var blurGroup = {};
               elements.forEach(function(el){
                 // Form elements survive show/hide cycles (only render()
                 // recreates them) — guard against stacking duplicate blur
@@ -1797,38 +1849,45 @@ enum DefaultWidget {
                 if (!el || el._blurBound) return;
                 el._blurBound = true;
                 el.addEventListener('blur', function(){
+                  var pending = {
+                    group: blurGroup,
+                    values: captureValues(elements),
+                    saveFn: saveFn,
+                    cancelFn: cancelFn
+                  };
+                  pendingFormCommit = pending;
                   formBlurTimeout = setTimeout(function(){
-                    if (window._escCancel) { window._escCancel = false; cancelFn(); return; }
-                    // Check if any of the elements have content
-                    var hasContent = elements.some(function(e){ return e && e.value.trim(); });
-                    if (!hasContent) { cancelFn(); return; }
-                    // A submit that validates false (e.g. only one of two
-                    // required fields filled) would otherwise leave the form
-                    // stuck open with orphaned text — cancel and say why.
-                    if (saveFn() === false) {
-                      cancelFn();
-                      showToast('Not saved — required fields missing', 'error');
-                    }
+                    if (pendingFormCommit === pending) commitScheduledBlur();
                   }, 100);
                 });
                 el.addEventListener('focus', function(){
-                  if (formBlurTimeout) { clearTimeout(formBlurTimeout); formBlurTimeout = null; }
+                  if (pendingFormCommit && pendingFormCommit.group === blurGroup) {
+                    if (formBlurTimeout) clearTimeout(formBlurTimeout);
+                    formBlurTimeout = null;
+                    pendingFormCommit = null;
+                  }
                 });
               });
             }
 
             function installEditBlur(elements, saveFn) {
+              var blurGroup = {};
               elements.forEach(function(el){
                 if (!el || el._blurBound) return;
                 el._blurBound = true;
                 el.addEventListener('blur', function(){
+                  var pending = { group: blurGroup, values: captureValues(elements), saveFn: saveFn };
+                  pendingEditCommit = pending;
                   editBlurTimeout = setTimeout(function(){
-                    if (window._escCancel) { window._escCancel = false; return; }
-                    if (editingItemId || editingSectionId) saveFn();
+                    if (pendingEditCommit === pending) commitScheduledBlur();
                   }, 100);
                 });
                 el.addEventListener('focus', function(){
-                  if (editBlurTimeout) { clearTimeout(editBlurTimeout); editBlurTimeout = null; }
+                  if (pendingEditCommit && pendingEditCommit.group === blurGroup) {
+                    if (editBlurTimeout) clearTimeout(editBlurTimeout);
+                    editBlurTimeout = null;
+                    pendingEditCommit = null;
+                  }
                 });
               });
             }
@@ -1998,15 +2057,15 @@ enum DefaultWidget {
                 var t = document.getElementById('newCardTitle');
                 var s = document.getElementById('newCardSection');
                 t.focus();
-                installFormBlur([t, s], function(){ return submitNewCard(); }, function(){ hideNewCardForm(); });
+                installFormBlur([t, s], function(values){ return submitNewCard(values); }, function(){ hideNewCardForm(); });
               },50);
             }
             function hideNewCardForm() {
               var form = document.getElementById('newCardForm');
               if (form) { form.classList.remove('show'); var inputs = form.querySelectorAll('input'); inputs.forEach(function(i){i.value='';}); }
             }
-            function submitNewCard() {
-              var t = document.getElementById('newCardTitle').value.trim(), s = document.getElementById('newCardSection').value.trim()||'General';
+            function submitNewCard(values) {
+              var t = values[0], s = values[1]||'General';
               if (!t) return false;
               var page = activePage(); if (!page) return true;
               page.cards.push({id:uid(),title:t,hideValues:false,sections:[{id:uid(),title:s,items:[]}]});
@@ -2019,15 +2078,15 @@ enum DefaultWidget {
               setTimeout(function(){
                 var inp = document.getElementById('renameInput_'+cid);
                 inp.focus(); inp.select();
-                installFormBlur([inp], function(){ submitRename(cid); }, function(){ hideRenameForm(cid); });
+                installFormBlur([inp], function(values){ submitRename(cid, values); }, function(){ hideRenameForm(cid); });
               },50);
             }
             function hideRenameForm(cid) {
               var form = document.getElementById('renameForm_'+cid);
               if (form) form.classList.remove('show');
             }
-            function submitRename(cid) {
-              var t = document.getElementById('renameInput_'+cid).value.trim(); if (!t) return;
+            function submitRename(cid, values) {
+              var t = values[0]; if (!t) return;
               var c = activePage().cards.find(function(x){return x.id===cid;}); if (c) c.title=t;
               save(); render();
             }
@@ -2178,10 +2237,7 @@ enum DefaultWidget {
               if (e.key==='Enter' && (editingItemId || editingSectionId)) {
                 if (e.target.tagName==='TEXTAREA' && e.shiftKey) return; // allow shift+enter in textarea
                 e.preventDefault();
-                var row = e.target.closest('.row-editing');
-                var sec = e.target.closest('.section-title-editing');
-                if (row) { trySaveEditItem(row.dataset.editCard, row.dataset.editSection, row.dataset.editItem); }
-                else if (sec) { trySaveEditSection(sec.dataset.editCard, sec.dataset.editSid); }
+                commitPendingEdit();
                 return;
               }
               if (e.key==='Enter' && e.target.tagName==='INPUT') {
