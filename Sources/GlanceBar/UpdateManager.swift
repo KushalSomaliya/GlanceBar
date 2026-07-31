@@ -6,6 +6,23 @@ import Foundation
 /// script kills this process and relaunches the new build, so `.upToDate` and
 /// `.failed` are the only terminal events an alive app ever observes.
 class UpdateManager {
+    private final class OutputBuffer {
+        private let lock = NSLock()
+        private var data = Data()
+
+        func append(_ newData: Data) {
+            lock.lock()
+            data.append(newData)
+            lock.unlock()
+        }
+
+        func snapshot() -> Data {
+            lock.lock()
+            defer { lock.unlock() }
+            return data
+        }
+    }
+
     enum Event {
         case status(String)
         case upToDate
@@ -16,29 +33,106 @@ class UpdateManager {
     var onEvent: ((Event) -> Void)?
     private(set) var isRunning = false
 
+    private var activeProcess: Process?
+    private var runID: UUID?
+    private var watchdogTimer: DispatchSourceTimer?
+    private var overallTimer: DispatchSourceTimer?
+    private let progressTimeout: TimeInterval = 5 * 60
+    private let overallTimeout: TimeInterval = 30 * 60
+
     private let srcDir = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".glancebar-src")
 
     func runUpdate() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.runUpdate() }
+            return
+        }
         guard !isRunning else { return }
         isRunning = true
+        let id = UUID()
+        runID = id
+        startTimeouts(for: id)
 
         let script = srcDir.appendingPathComponent("update.sh")
         if FileManager.default.fileExists(atPath: script.path) {
-            runUpdateScript(script)
+            runUpdateScript(script, for: id)
         } else {
-            bootstrapAndUpdate()
+            bootstrapAndUpdate(for: id)
         }
     }
 
-    private func emit(_ event: Event) {
+    private func emitStatus(_ status: String, for id: UUID) {
         DispatchQueue.main.async { [weak self] in
-            if case .status = event {} else { self?.isRunning = false }
-            self?.onEvent?(event)
+            guard let self, self.runID == id else { return }
+            self.resetWatchdog(for: id)
+            self.onEvent?(.status(status))
         }
     }
 
-    private func runUpdateScript(_ script: URL) {
+    private func noteProgress(for id: UUID) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.runID == id else { return }
+            self.resetWatchdog(for: id)
+        }
+    }
+
+    private func finish(_ event: Event, for id: UUID) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard runID == id else { return }
+        watchdogTimer?.cancel()
+        watchdogTimer = nil
+        overallTimer?.cancel()
+        overallTimer = nil
+        activeProcess = nil
+        runID = nil
+        isRunning = false
+        onEvent?(event)
+    }
+
+    private func startTimeouts(for id: UUID) {
+        resetWatchdog(for: id)
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + overallTimeout)
+        timer.setEventHandler { [weak self] in
+            self?.timeOut(
+                id,
+                message: "Update timed out after 30 minutes. Please try again."
+            )
+        }
+        overallTimer = timer
+        timer.resume()
+    }
+
+    private func resetWatchdog(for id: UUID) {
+        guard runID == id else { return }
+        if watchdogTimer == nil {
+            let timer = DispatchSource.makeTimerSource(queue: .main)
+            timer.setEventHandler { [weak self] in
+                self?.timeOut(
+                    id,
+                    message: "Update timed out after 5 minutes without progress. Please try again."
+                )
+            }
+            timer.schedule(deadline: .now() + progressTimeout)
+            watchdogTimer = timer
+            timer.resume()
+            return
+        }
+        watchdogTimer?.schedule(deadline: .now() + progressTimeout)
+    }
+
+    private func timeOut(_ id: UUID, message: String) {
+        guard runID == id else { return }
+        let process = activeProcess
+        if process?.isRunning == true {
+            process?.terminate()
+        }
+        finish(.failed(message), for: id)
+    }
+
+    private func runUpdateScript(_ script: URL, for id: UUID) {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/bash")
         task.arguments = [script.path]
@@ -50,19 +144,22 @@ class UpdateManager {
         env["GLANCEBAR_TARGET"] = Bundle.main.bundlePath
         task.environment = env
 
-        // Stream the script's stdout and forward progress lines to the banner.
+        // Stream the script's output and forward progress lines to the banner.
         let stdoutPipe = Pipe()
         task.standardOutput = stdoutPipe
+        task.standardError = stdoutPipe
         var buffer = ""
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+            guard !data.isEmpty else { return }
+            self?.noteProgress(for: id)
+            guard let chunk = String(data: data, encoding: .utf8) else { return }
             buffer.append(chunk)
             while let newlineIdx = buffer.firstIndex(of: "\n") {
                 let line = String(buffer[..<newlineIdx]).trimmingCharacters(in: .whitespaces)
                 buffer.removeSubrange(...newlineIdx)
                 if line.hasPrefix("\u{2192} ") {
-                    self?.emit(.status(String(line.dropFirst(2))))
+                    self?.emitStatus(String(line.dropFirst(2)), for: id)
                 }
             }
         }
@@ -72,62 +169,73 @@ class UpdateManager {
         // (exit 0) or a failure (non-zero).
         task.terminationHandler = { [weak self] proc in
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            if proc.terminationStatus == 0 {
-                self?.emit(.upToDate)
-            } else {
-                self?.emit(.failed("Update script exited with code \(proc.terminationStatus)"))
+            DispatchQueue.main.async {
+                guard let self, self.runID == id, self.activeProcess === proc else { return }
+                if proc.terminationStatus == 0 {
+                    self.finish(.upToDate, for: id)
+                } else {
+                    self.finish(.failed("Update script exited with code \(proc.terminationStatus)"), for: id)
+                }
             }
         }
 
+        activeProcess = task
         do {
             try task.run()
         } catch {
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            emit(.failed("Could not start updater: \(error.localizedDescription)"))
+            finish(.failed("Could not start updater: \(error.localizedDescription)"), for: id)
         }
     }
 
-    private func bootstrapAndUpdate() {
-        emit(.status("Cloning repo..."))
+    private func bootstrapAndUpdate(for id: UUID) {
+        emitStatus("Cloning repo...", for: id)
+        let repoURL = "https://github.com/\(AppConstants.githubRepo).git"
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            let repoURL = "https://github.com/\(AppConstants.githubRepo).git"
+        // Remove any partial dir from a previous failed bootstrap.
+        try? FileManager.default.removeItem(at: srcDir)
 
-            // Remove any partial dir from a previous failed bootstrap.
-            try? FileManager.default.removeItem(at: self.srcDir)
-
-            let clone = Process()
-            clone.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            clone.arguments = ["clone", "--depth", "1", repoURL, self.srcDir.path]
-            let stderrPipe = Pipe()
-            clone.standardError = stderrPipe
-            clone.standardOutput = Pipe()  // discard stdout
-
-            do {
-                try clone.run()
-                clone.waitUntilExit()
-            } catch {
-                self.emit(.failed("git not available: \(error.localizedDescription)"))
-                return
-            }
-
-            if clone.terminationStatus != 0 {
-                let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let err = String(data: errData, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? "clone failed"
-                self.emit(.failed("Clone failed: \(String(err.prefix(200)))"))
-                return
-            }
-
+        let clone = Process()
+        clone.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        clone.arguments = ["clone", "--depth", "1", repoURL, srcDir.path]
+        let stderrPipe = Pipe()
+        let errorOutput = OutputBuffer()
+        stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            errorOutput.append(data)
+            self?.noteProgress(for: id)
+        }
+        clone.standardError = stderrPipe
+        clone.standardOutput = Pipe()  // discard stdout
+        clone.terminationHandler = { [weak self] proc in
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            let errData = errorOutput.snapshot()
             DispatchQueue.main.async {
-                let script = self.srcDir.appendingPathComponent("update.sh")
-                guard FileManager.default.fileExists(atPath: script.path) else {
-                    self.emit(.failed("update.sh missing from cloned repo"))
+                guard let self, self.runID == id, self.activeProcess === proc else { return }
+                if proc.terminationStatus != 0 {
+                    let err = String(data: errData, encoding: .utf8)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines) ?? "clone failed"
+                    self.finish(.failed("Clone failed: \(String(err.prefix(200)))"), for: id)
                     return
                 }
-                self.runUpdateScript(script)
+
+                let script = self.srcDir.appendingPathComponent("update.sh")
+                guard FileManager.default.fileExists(atPath: script.path) else {
+                    self.finish(.failed("update.sh missing from cloned repo"), for: id)
+                    return
+                }
+                self.resetWatchdog(for: id)
+                self.runUpdateScript(script, for: id)
             }
+        }
+
+        activeProcess = clone
+        do {
+            try clone.run()
+        } catch {
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            finish(.failed("git not available: \(error.localizedDescription)"), for: id)
         }
     }
 }

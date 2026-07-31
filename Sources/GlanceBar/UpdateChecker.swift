@@ -18,26 +18,34 @@ class UpdateChecker {
     private let repo: String
     private let minInterval: TimeInterval
     private let buildCommit: String?
+    private let buildDirty: Bool
     private var lastCheckedAt: Date?
 
     init(
         currentVersion: String = AppConstants.version,
         repo: String = AppConstants.githubRepo,
         minInterval: TimeInterval = 3600,
-        buildCommit: String? = AppConstants.buildCommit
+        buildCommit: String? = AppConstants.buildCommit,
+        buildDirty: Bool = Bundle.main.object(forInfoDictionaryKey: "GlanceBarBuildDirty") as? Bool ?? false
     ) {
         self.currentVersion = currentVersion
         self.repo = repo
         self.minInterval = minInterval
         self.buildCommit = buildCommit
+        self.buildDirty = buildDirty
     }
 
     /// `force` bypasses the debounce (user picked "Check for Updates…").
-    /// Completion runs on the main queue. Debounced auto-checks return
-    /// without calling completion.
+    /// Completion runs on the main queue. Debounced auto-checks and
+    /// inconclusive commit fallbacks return without calling completion.
     func checkForUpdates(force: Bool = false, completion: @escaping (UpdateStatus) -> Void) {
         if !force, let last = lastCheckedAt, Date().timeIntervalSince(last) < minInterval { return }
         lastCheckedAt = Date()
+
+        if buildDirty {
+            DispatchQueue.main.async { completion(.upToDate) }
+            return
+        }
 
         if let built = buildCommit {
             compareBuildCommit(built, completion: completion)
@@ -53,9 +61,11 @@ class UpdateChecker {
         fetchJSON(urlString) { result in
             switch result {
             case .failure(let message, let httpStatus):
-                // 404 means GitHub doesn't know this commit — a local dev
-                // build ahead of main. Don't nag the developer.
-                completion(httpStatus == 404 ? .upToDate : .checkFailed(message))
+                if httpStatus == 404 {
+                    self.compareTags(silentIfInconclusive: true, completion: completion)
+                } else {
+                    completion(.checkFailed(message))
+                }
             case .success(let json):
                 guard let dict = json as? [String: Any],
                     let status = dict["status"] as? String
@@ -78,16 +88,21 @@ class UpdateChecker {
 
     // MARK: - Tag comparison (fallback for unstamped binaries)
 
-    private func compareTags(completion: @escaping (UpdateStatus) -> Void) {
+    private func compareTags(
+        silentIfInconclusive: Bool = false,
+        completion: @escaping (UpdateStatus) -> Void
+    ) {
         let urlString = "https://api.github.com/repos/\(repo)/tags?per_page=100"
         fetchJSON(urlString) { [weak self] result in
             guard let self else { return }
             switch result {
             case .failure(let message, _):
-                completion(.checkFailed(message))
+                if !silentIfInconclusive { completion(.checkFailed(message)) }
             case .success(let json):
                 guard let tags = json as? [[String: Any]] else {
-                    completion(.checkFailed("Unexpected response from GitHub"))
+                    if !silentIfInconclusive {
+                        completion(.checkFailed("Unexpected response from GitHub"))
+                    }
                     return
                 }
                 // The tags endpoint has no ordering guarantee — pick the
@@ -102,7 +117,7 @@ class UpdateChecker {
                     }
                 }
                 guard let latest else {
-                    completion(.upToDate)
+                    if !silentIfInconclusive { completion(.upToDate) }
                     return
                 }
                 if Self.compare(latest.components, Self.versionComponents(self.currentVersion)) > 0 {
