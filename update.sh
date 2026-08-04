@@ -311,10 +311,56 @@ main() {
         exec >/dev/null 2>&1
     fi
 
-    pkill -f 'GlanceBar\.app/Contents/MacOS/GlanceBar' 2>/dev/null || true
-    sleep 1
+    local GLANCEBAR_PROCESS='GlanceBar\.app/Contents/MacOS/GlanceBar'
+    local WAIT_COUNT
 
-    open "$APP_DIR/$APP_NAME"
+    pkill -a -f "$GLANCEBAR_PROCESS" 2>/dev/null || true
+    for ((WAIT_COUNT = 0; WAIT_COUNT < 50; WAIT_COUNT++)); do
+        if ! pgrep -a -q -f "$GLANCEBAR_PROCESS"; then
+            break
+        fi
+        sleep 0.1
+    done
+
+    if pgrep -a -q -f "$GLANCEBAR_PROCESS"; then
+        echo "→ GlanceBar is still running; forcing it to stop..."
+        pkill -KILL -a -f "$GLANCEBAR_PROCESS" 2>/dev/null || true
+        for ((WAIT_COUNT = 0; WAIT_COUNT < 20; WAIT_COUNT++)); do
+            if ! pgrep -a -q -f "$GLANCEBAR_PROCESS"; then
+                break
+            fi
+            sleep 0.1
+        done
+    fi
+
+    if pgrep -a -q -f "$GLANCEBAR_PROCESS"; then
+        echo "→ Error: GlanceBar did not stop; restart aborted." >&2
+        exit 1
+    fi
+
+    open "$APP_DIR/$APP_NAME" || true
+    for ((WAIT_COUNT = 0; WAIT_COUNT < 30; WAIT_COUNT++)); do
+        if pgrep -a -q -f "$GLANCEBAR_PROCESS"; then
+            break
+        fi
+        sleep 0.1
+    done
+
+    if ! pgrep -a -q -f "$GLANCEBAR_PROCESS"; then
+        echo "→ GlanceBar did not start; retrying..."
+        open -n "$APP_DIR/$APP_NAME" || true
+        for ((WAIT_COUNT = 0; WAIT_COUNT < 30; WAIT_COUNT++)); do
+            if pgrep -a -q -f "$GLANCEBAR_PROCESS"; then
+                break
+            fi
+            sleep 0.1
+        done
+    fi
+
+    if ! pgrep -a -q -f "$GLANCEBAR_PROCESS"; then
+        echo "→ Error: GlanceBar was updated but could not be restarted." >&2
+        exit 1
+    fi
 
     echo ""
     echo "✓ GlanceBar updated successfully!"
