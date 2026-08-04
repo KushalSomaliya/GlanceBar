@@ -5,13 +5,20 @@ import AppKit
 /// files and stale app-generated ones that predate the old in-page banner.
 final class UpdateBannerView: NSView {
     var onUpdate: (() -> Void)?
+    var onRestart: (() -> Void)?
     var onDismiss: (() -> Void)?
+
+    private enum Action {
+        case update
+        case restart
+    }
 
     private let label = NSTextField(labelWithString: "")
     private let actionButton = NSButton(title: "Update", target: nil, action: nil)
     private let closeButton = NSButton(title: "\u{2715}", target: nil, action: nil)
     private let spinner = NSProgressIndicator()
     private var autoHideTimer: Timer?
+    private var action: Action = .update
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -33,7 +40,7 @@ final class UpdateBannerView: NSView {
         actionButton.controlSize = .small
         actionButton.font = .systemFont(ofSize: 11, weight: .semibold)
         actionButton.target = self
-        actionButton.action = #selector(updateClicked)
+        actionButton.action = #selector(actionClicked)
         actionButton.translatesAutoresizingMaskIntoConstraints = false
 
         closeButton.isBordered = false
@@ -89,7 +96,13 @@ final class UpdateBannerView: NSView {
     // MARK: - States
 
     func showUpdateAvailable(_ text: String) {
+        action = .update
         present(text: text, buttonTitle: "Update", showsClose: true, spinning: false)
+    }
+
+    func showRestart(_ text: String) {
+        action = .restart
+        present(text: text, buttonTitle: "Restart", showsClose: true, spinning: false)
     }
 
     func showProgress(_ text: String) {
@@ -97,6 +110,7 @@ final class UpdateBannerView: NSView {
     }
 
     func showError(_ text: String) {
+        action = .update
         present(text: text, buttonTitle: "Retry", showsClose: true, spinning: false)
     }
 
@@ -137,7 +151,12 @@ final class UpdateBannerView: NSView {
         }
     }
 
-    @objc private func updateClicked() { onUpdate?() }
+    @objc private func actionClicked() {
+        switch action {
+        case .update: onUpdate?()
+        case .restart: onRestart?()
+        }
+    }
 
     @objc private func dismissClicked() {
         hide()

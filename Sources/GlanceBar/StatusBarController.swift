@@ -8,6 +8,7 @@ class StatusBarController {
     private let onOpenFolder: () -> Void
     private let onToggleDesktopPin: () -> Void
     private let onCheckForUpdates: () -> Void
+    private let onRestart: () -> Void
     private let preferencesManager: PreferencesManager
     private var pinMenuItem: NSMenuItem!
 
@@ -18,6 +19,7 @@ class StatusBarController {
         onOpenFolder: @escaping () -> Void,
         onToggleDesktopPin: @escaping () -> Void,
         onCheckForUpdates: @escaping () -> Void,
+        onRestart: @escaping () -> Void,
         preferencesManager: PreferencesManager
     ) {
         self.onToggle = onToggle
@@ -26,6 +28,7 @@ class StatusBarController {
         self.onOpenFolder = onOpenFolder
         self.onToggleDesktopPin = onToggleDesktopPin
         self.onCheckForUpdates = onCheckForUpdates
+        self.onRestart = onRestart
         self.preferencesManager = preferencesManager
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -90,6 +93,8 @@ class StatusBarController {
 
         menu.addItem(.separator())
 
+        menu.addItem(withTitle: "Restart GlanceBar", action: #selector(menuRestart), keyEquivalent: "")
+            .target = self
         menu.addItem(withTitle: "Quit GlanceBar", action: #selector(menuQuit), keyEquivalent: "q")
             .target = self
 
@@ -108,5 +113,6 @@ class StatusBarController {
     @objc private func menuOpenFolder() { onOpenFolder() }
     @objc private func menuPreferences() { onPreferences() }
     @objc private func menuCheckForUpdates() { onCheckForUpdates() }
+    @objc private func menuRestart() { onRestart() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 }

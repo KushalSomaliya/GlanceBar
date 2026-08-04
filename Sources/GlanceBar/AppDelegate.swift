@@ -35,6 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             onOpenFolder: { [weak self] in self?.openWidgetFolder() },
             onToggleDesktopPin: { [weak self] in self?.toggleDesktopPin() },
             onCheckForUpdates: { [weak self] in self?.checkForUpdatesManually() },
+            onRestart: { [weak self] in self?.restart() },
             preferencesManager: preferencesManager
         )
 
@@ -106,6 +107,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             banner.showProgress("Starting update...")
             self?.updateManager.runUpdate()
         }
+        banner.onRestart = { [weak self] in self?.restart() }
         banner.onDismiss = { [weak self] in
             guard let self else { return }
             let dismissedUpdateOffer = self.isUpdateOfferVisible
@@ -119,7 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let banner = self.panelController.updateBanner
             switch event {
             case .status(let text): banner.showProgress(text)
-            case .upToDate: banner.showTransient("You're up to date \u{2713}")
+            case .upToDate: banner.showRestart("Update complete — restart GlanceBar")
             case .failed(let error): banner.showError(error)
             }
         }
@@ -165,6 +167,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 banner.showTransient("Update check failed: \(error)")
             }
         }
+    }
+
+    /// Relaunches only after this process is gone so Launch Services cannot
+    /// reactivate an instance that is already terminating.
+    private func restart() {
+        let helper = Process()
+        helper.executableURL = URL(fileURLWithPath: "/usr/bin/nohup")
+        helper.arguments = [
+            "/bin/sh",
+            "-c",
+            """
+            while /bin/kill -0 "$1" 2>/dev/null; do
+                /bin/sleep 0.1
+            done
+            exec /usr/bin/open -n "$2"
+            """,
+            "GlanceBar restart helper",
+            String(ProcessInfo.processInfo.processIdentifier),
+            Bundle.main.bundlePath,
+        ]
+        helper.standardInput = FileHandle.nullDevice
+        helper.standardOutput = FileHandle.nullDevice
+        helper.standardError = FileHandle.nullDevice
+
+        do {
+            try helper.run()
+        } catch {
+            print("GlanceBar: Failed to start restart helper: \(error)")
+            return
+        }
+
+        NSApp.terminate(nil)
     }
 
     /// Terminates other running GlanceBar instances (any bundle ID vintage)
