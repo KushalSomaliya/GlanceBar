@@ -14,7 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateManager: UpdateManager!
     private var lastOfferedUpdateCommit: String?
     private var isUpdateOfferVisible = false
-    private var visibleDuplicateInstall: DuplicateInstall?
+    private var visibleNotice: BannerNotice?
     private var widgetFilePathObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -63,6 +63,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupUpdateSystem()
         checkForDuplicateInstalls()
+        checkForHiddenMenuBarIcon()
 
         // Re-apply theme when macOS appearance changes (light/dark schedule)
         DistributedNotificationCenter.default().addObserver(
@@ -106,17 +107,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let banner = panelController.updateBanner
         banner.onUpdate = { [weak self] in
             self?.isUpdateOfferVisible = false
-            self?.visibleDuplicateInstall = nil
+            self?.visibleNotice = nil
             banner.showProgress("Starting update...")
             self?.updateManager.runUpdate()
         }
         banner.onRestart = { [weak self] in self?.restart() }
         banner.onDismiss = { [weak self] in
             guard let self else { return }
-            if let duplicate = self.visibleDuplicateInstall {
-                self.visibleDuplicateInstall = nil
+            switch self.visibleNotice {
+            case .duplicateInstall(let duplicate):
                 self.preferencesManager.dismissedDuplicateInstall = duplicate.identity
+            case .hiddenIcon:
+                self.preferencesManager.dismissedHiddenIconBuild = Self.currentBuildIdentity
+            case nil:
+                break
             }
+            self.visibleNotice = nil
             let dismissedUpdateOffer = self.isUpdateOfferVisible
             self.isUpdateOfferVisible = false
             guard dismissedUpdateOffer else { return }
@@ -125,7 +131,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateManager.onEvent = { [weak self] event in
             guard let self else { return }
             self.isUpdateOfferVisible = false
-            self.visibleDuplicateInstall = nil
+            self.visibleNotice = nil
             let banner = self.panelController.updateBanner
             switch event {
             case .status(let text): banner.showProgress(text)
@@ -151,7 +157,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let commit, commit == self.preferencesManager.dismissedUpdateCommit { return }
             self.lastOfferedUpdateCommit = commit
             self.isUpdateOfferVisible = true
-            self.visibleDuplicateInstall = nil
+            self.visibleNotice = nil
             self.panelController.updateBanner.showUpdateAvailable(summary)
         }
     }
@@ -163,7 +169,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateChecker.checkForUpdates(force: true) { [weak self] status in
             guard let self, !self.updateManager.isRunning else { return }
             let banner = self.panelController.updateBanner
-            self.visibleDuplicateInstall = nil
+            self.visibleNotice = nil
             switch status {
             case .upToDate:
                 self.isUpdateOfferVisible = false
@@ -209,6 +215,48 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.terminate(nil)
+    }
+
+    // MARK: - Banner notices
+
+    /// What the native banner is currently showing besides update state, so a
+    /// dismissal can be remembered for the right thing.
+    private enum BannerNotice {
+        case duplicateInstall(DuplicateInstall)
+        case hiddenIcon
+    }
+
+    private static var currentBuildIdentity: String {
+        AppConstants.buildCommit ?? AppConstants.version
+    }
+
+    /// macOS Tahoe can leave the status item alive but off-screen while the
+    /// hotkey keeps working, which reads as "the app is broken". Say so in the
+    /// panel and point at the fix instead of staying silent.
+    private func checkForHiddenMenuBarIcon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self, self.statusBarController.isIconLikelyHidden() else { return }
+            guard self.preferencesManager.dismissedHiddenIconBuild != Self.currentBuildIdentity else { return }
+            let banner = self.panelController.updateBanner
+            // A duplicate-install notice or update progress is more urgent — keep it.
+            guard banner.isHidden else { return }
+            self.visibleNotice = .hiddenIcon
+            banner.showNotice(
+                "Menu bar icon is hidden by macOS",
+                buttonTitle: "Help",
+                tooltip: "GlanceBar is running (the hotkey works) but macOS keeps its menu bar icon off-screen. "
+                    + "Remove duplicate GlanceBar.app copies, then check System Settings → Menu Bar → "
+                    + "Allow in the Menu Bar (or your menu bar manager). If it stays hidden, the known fix is "
+                    + "a new bundle identifier — see docs/troubleshooting-invisible-icon.md."
+            ) { [weak self] in
+                self?.visibleNotice = nil
+                banner.hide()
+                let docURL = "https://github.com/\(AppConstants.githubRepo)/blob/main/docs/troubleshooting-invisible-icon.md"
+                if let url = URL(string: docURL) {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        }
     }
 
     // MARK: - Duplicate installs
@@ -286,7 +334,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let folder = (duplicate.url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath
         let otherVersion = duplicate.version.map { "v\($0)" } ?? "unstamped build"
         isUpdateOfferVisible = false
-        visibleDuplicateInstall = duplicate
+        visibleNotice = .duplicateInstall(duplicate)
 
         if duplicate.isNewer {
             banner.showNotice(
@@ -296,7 +344,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     + "This copy (v\(AppConstants.version)) is out of date — open the newer one instead; "
                     + "it takes over from this copy."
             ) { [weak self] in
-                self?.visibleDuplicateInstall = nil
+                self?.visibleNotice = nil
                 banner.hide()
                 NSWorkspace.shared.openApplication(
                     at: duplicate.url, configuration: NSWorkspace.OpenConfiguration()
@@ -318,7 +366,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func trashDuplicateInstall(_ duplicate: DuplicateInstall) {
         let banner = panelController.updateBanner
-        visibleDuplicateInstall = nil
+        visibleNotice = nil
         // Quit any running instance of that copy first so it cannot keep
         // owning the hotkey or come back on top after its bundle is gone.
         let bundlePrefix = duplicate.url.path + "/"

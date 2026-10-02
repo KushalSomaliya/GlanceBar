@@ -20,6 +20,7 @@ class PreferencesManager {
         static let shortcutModifiers = "shortcutModifiers"
         static let dismissedUpdateCommit = "dismissedUpdateCommit"
         static let dismissedDuplicateInstall = "dismissedDuplicateInstall"
+        static let dismissedHiddenIconBuild = "dismissedHiddenIconBuild"
     }
 
     /// Remote commit the user dismissed the update banner for — that exact
@@ -34,6 +35,13 @@ class PreferencesManager {
     var dismissedDuplicateInstall: String? {
         get { defaults.string(forKey: Keys.dismissedDuplicateInstall) }
         set { defaults.set(newValue, forKey: Keys.dismissedDuplicateInstall) }
+    }
+
+    /// Build (commit or version) for which the "menu bar icon hidden by macOS"
+    /// notice was dismissed — it returns after the next rebuild if still hidden.
+    var dismissedHiddenIconBuild: String? {
+        get { defaults.string(forKey: Keys.dismissedHiddenIconBuild) }
+        set { defaults.set(newValue, forKey: Keys.dismissedHiddenIconBuild) }
     }
 
     var hotCorner: ScreenCorner {

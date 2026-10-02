@@ -71,6 +71,7 @@ A lightweight macOS menu bar app that provides a custom widget sidebar panel wit
 - **Several `GlanceBar.app` bundles = nondeterministic launches.** The `glancebar` alias opens one path; Spotlight, Raycast and Login Items resolve through Launch Services and may pick another (older) copy, which then kills the newer-launched instance via the single-instance guard. Pre-1.1.5 copies also ran actions with the launchd PATH, so scripts only worked when the app was started from a terminal (`open` passes the terminal's environment). `AppDelegate.checkForDuplicateInstalls()` queries `NSWorkspace.urlsForApplications(withBundleIdentifier:)` for both bundle IDs, ignores copies built from the same commit, and shows a native banner notice (Trash, or Open when the other copy is newer). Dismissals are remembered per copy (`dismissedDuplicateInstall`).
 - **The slide-in panel spans the full screen height, under the menu bar.** Anything pinned to its top edge must clear `screen.frame.maxY - screen.visibleFrame.maxY` (37pt on notched MacBooks). The banner used to sit at +10 and was mostly hidden behind the menu bar; `PanelController.layoutBannerInsets()` now places it below the menu bar and, while it is visible, moves the web view's top down to the banner's top so the banner never covers the widget's search bar (the default widget's 48px body padding then lands content just under the banner).
 - Action commands get `stdin = /dev/null` so an interactive rc file that prompts can never hang until the timeout.
+- **Hidden menu bar icon is reported, not silently tolerated.** `StatusBarController.isIconLikelyHidden()` (status item window far from the menu bar strip or off the active space, 2s after launch) drives a banner notice with a Help button; dismissal is remembered per build (`dismissedHiddenIconBuild`). `install.sh`/`update.sh` register the installed bundle with `lsregister -f` and print every other GlanceBar.app built from a different commit — they report, never delete.
 
 ### Global Hotkey (Carbon API)
 
@@ -173,3 +174,4 @@ Data is stored separately in `~/.glancebar/data.json` and survives widget file c
 - `shortcutModifiers` — NSEvent.ModifierFlags raw value (default: Command)
 - `dismissedUpdateCommit` — origin/main commit whose update offer was dismissed
 - `dismissedDuplicateInstall` — "path|build" of a duplicate GlanceBar.app the user chose to ignore
+- `dismissedHiddenIconBuild` — build for which the "menu bar icon hidden" notice was dismissed

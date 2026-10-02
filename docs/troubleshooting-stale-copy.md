@@ -49,12 +49,22 @@ ps -eo lstart,command | grep '[G]lanceBar.app/Contents/MacOS'
 
 ## Fix
 
-1. Keep exactly one copy. Trash the others (the app now offers a **Trash** button in the banner when it
-   finds a stale copy; "Running from …" in the status menu shows which one you are on).
+1. Keep exactly one copy. Trash the others (the app offers a **Trash** button in the banner when it
+   finds a stale copy; "Running from …" in the status menu shows which one you are on). `install.sh` and
+   `glancebar-update` also print an "Another GlanceBar.app at …" line for every stale copy they find; they
+   never delete anything themselves.
 2. Make sure Login Items points at the surviving copy: System Settings → General → Login Items → remove
    GlanceBar, then re-enable "Launch at Login" in GlanceBar's Preferences from the copy you kept.
 3. If `~/.glancebar/index.html` was downgraded by the stale copy, launching the current copy regenerates it
    (a backup is written to `index.html.bak` first).
+
+## Related: invisible menu bar icon
+
+Several copies with the same bundle ID, each ad-hoc signed differently, is also the setup that trips
+macOS Tahoe's per-bundle-ID menu bar state (see [`troubleshooting-invisible-icon.md`](troubleshooting-invisible-icon.md)).
+Since the hotkey keeps working, the app now shows a "Menu bar icon is hidden by macOS" notice in the
+panel banner about two seconds after launch when its status item is parked off-screen. Remove the
+duplicates first; if the icon is still hidden after a relaunch, follow that doc (new bundle identifier).
 
 ## Prevention
 

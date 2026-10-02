@@ -78,6 +78,31 @@ xattr -rd com.apple.quarantine "$APP_DIR/$APP_NAME" 2>/dev/null || true
 codesign --force --deep --sign - "$APP_DIR/$APP_NAME" 2>/dev/null || true
 echo "→ Installed to $APP_DIR/$APP_NAME"
 
+# Register this copy with Launch Services and point out any other GlanceBar.app
+# built from different code: Spotlight, Raycast and Login Items may launch a
+# stale copy instead of this one. Nothing is deleted here — the app's banner
+# offers a Trash button for stale copies.
+LS_REGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+"$LS_REGISTER" -f "$APP_DIR/$APP_NAME" 2>/dev/null || true
+INSTALL_REAL=$(cd -P "$APP_DIR/$APP_NAME" && pwd -P)
+INSTALL_COMMIT=$(/usr/libexec/PlistBuddy -c 'Print :GlanceBarBuildCommit' "$APP_DIR/$APP_NAME/Contents/Info.plist" 2>/dev/null || true)
+while IFS= read -r CANDIDATE; do
+    [ -d "$CANDIDATE" ] || continue
+    REAL=$(cd -P "$CANDIDATE" && pwd -P) || continue
+    [ "$REAL" = "$INSTALL_REAL" ] && continue
+    case "$REAL" in */.Trash/*) continue ;; esac
+    ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$REAL/Contents/Info.plist" 2>/dev/null) || continue
+    case "$ID" in dev.kushal.glancebar|com.kushal.glancebar) ;; *) continue ;; esac
+    COMMIT=$(/usr/libexec/PlistBuddy -c 'Print :GlanceBarBuildCommit' "$REAL/Contents/Info.plist" 2>/dev/null || true)
+    if [ -n "$COMMIT" ] && [ "$COMMIT" = "$INSTALL_COMMIT" ]; then continue; fi
+    VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$REAL/Contents/Info.plist" 2>/dev/null || echo "?")
+    echo "→ Another GlanceBar.app at $REAL (v$VERSION, ${COMMIT:-unstamped}) — move it to the Trash so Spotlight, Raycast and Login Items can only open $APP_DIR/$APP_NAME"
+done < <({
+    mdfind "kMDItemCFBundleIdentifier == 'dev.kushal.glancebar' || kMDItemCFBundleIdentifier == 'com.kushal.glancebar'" 2>/dev/null || true
+    printf '%s\n' /Applications/GlanceBar.app "$HOME/Applications/GlanceBar.app" \
+        "$HOME/Desktop/GlanceBar.app" "$HOME/Downloads/GlanceBar.app" "$SRC_DIR/GlanceBar.app"
+} | awk 'NF' | sort -u)
+
 # Add alias if not present
 SHELL_RC="$HOME/.zshrc"
 if [ -f "$HOME/.bashrc" ] && [ ! -f "$HOME/.zshrc" ]; then

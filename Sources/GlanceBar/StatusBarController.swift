@@ -115,6 +115,18 @@ class StatusBarController {
         pinMenuItem?.state = isPinned ? .on : .off
     }
 
+    /// macOS Tahoe can keep a status item "allowed" yet park its window
+    /// off-screen (docs/troubleshooting-invisible-icon.md shows frames like
+    /// (0, -5, 38, 22) with isOnActiveSpace == false). True when the item's
+    /// window is nowhere near the menu bar strip of its screen. An item the
+    /// user removed themselves (isVisible == false) is not a hidden one.
+    func isIconLikelyHidden() -> Bool {
+        guard statusItem.isVisible else { return false }
+        guard let window = statusItem.button?.window else { return true }
+        guard let screen = window.screen ?? NSScreen.main else { return true }
+        return window.frame.maxY < screen.frame.maxY - 60 || !window.isOnActiveSpace
+    }
+
     @objc private func menuToggle() { onToggle() }
     @objc private func menuTogglePin() { onToggleDesktopPin() }
     @objc private func menuEditWidget() { onEditWidget() }

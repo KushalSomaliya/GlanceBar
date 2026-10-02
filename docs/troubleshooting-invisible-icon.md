@@ -98,9 +98,16 @@ func debugInfo() -> String {
 
 If `window.frame.origin.y` is negative (like `-5` or `-17`) and `isOnActiveSpace` is `false` while `isVisible` is `true`, it's this bug. Change the bundle ID.
 
-## Detection in-app (optional)
+## Detection in-app
 
-You can warn users if their icon is invisible using the Stats app's pattern — check the window Y position 1-2 seconds after launch:
+GlanceBar does this itself now: `StatusBarController.isIconLikelyHidden()` checks the status item's window
+two seconds after launch, and `AppDelegate.checkForHiddenMenuBarIcon()` shows a "Menu bar icon is hidden by
+macOS" notice in the panel banner (Help opens this doc). Dismissing it silences the notice until the next
+rebuild. Also check for duplicate `GlanceBar.app` copies first — see
+[`troubleshooting-stale-copy.md`](troubleshooting-stale-copy.md); several differently-signed copies sharing one
+bundle ID is the setup that most often ends here.
+
+The pattern, for reference (from the Stats app) — check the window Y position 1-2 seconds after launch:
 
 ```swift
 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in

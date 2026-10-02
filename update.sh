@@ -165,6 +165,45 @@ main() {
         fi
     }
 
+    # Every GlanceBar.app we can find: Spotlight's index (which skips hidden
+    # folders) plus the usual install spots and the build output.
+    list_glancebar_bundles() {
+        {
+            mdfind "kMDItemCFBundleIdentifier == '$NEW_BUNDLE_ID' || kMDItemCFBundleIdentifier == '$OLD_BUNDLE_ID'" 2>/dev/null || true
+            printf '%s\n' "/Applications/GlanceBar.app" "$HOME/Applications/GlanceBar.app" \
+                "$HOME/Desktop/GlanceBar.app" "$HOME/Downloads/GlanceBar.app" "$SRC_DIR/GlanceBar.app"
+        } | awk 'NF' | sort -u
+    }
+
+    # Spotlight, Raycast and Login Items resolve "GlanceBar" through Launch
+    # Services and may launch ANY registered copy — a stale one runs old code
+    # (pre-1.1.5: actions with the bare launchd PATH), shows an out-of-date
+    # banner and rewrites the default widget to its own template. Report every
+    # other GlanceBar.app built from different code so the user can remove it.
+    # Nothing is deleted here; the app offers a Trash button for it.
+    report_duplicate_bundles() {
+        local keep_app="$1" keep_real="$2" keep_commit candidate real plist id version commit found=0
+        keep_commit=$(/usr/libexec/PlistBuddy -c 'Print :GlanceBarBuildCommit' "$keep_app/Contents/Info.plist" 2>/dev/null || true)
+        while IFS= read -r candidate; do
+            [ -d "$candidate" ] || continue
+            real=$(canonical_bundle_path "$candidate") || continue
+            [ "$real" = "$keep_real" ] && continue
+            case "$real" in */.Trash/*) continue ;; esac
+            plist="$real/Contents/Info.plist"
+            id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist" 2>/dev/null) || continue
+            [ "$id" = "$NEW_BUNDLE_ID" ] || [ "$id" = "$OLD_BUNDLE_ID" ] || continue
+            commit=$(/usr/libexec/PlistBuddy -c 'Print :GlanceBarBuildCommit' "$plist" 2>/dev/null || true)
+            # Same commit (e.g. the build output in the checkout) is identical code.
+            if [ -n "$commit" ] && [ "$commit" = "$keep_commit" ]; then continue; fi
+            version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist" 2>/dev/null || echo "?")
+            found=$((found + 1))
+            echo "→ Another GlanceBar.app at $real (v$version, ${commit:-unstamped}) — Spotlight, Raycast or Login Items may launch that stale copy"
+        done < <(list_glancebar_bundles)
+        if [ "$found" -gt 0 ]; then
+            echo "→ Move stale copies to the Trash (GlanceBar's banner offers a Trash button) so only $keep_app can start"
+        fi
+    }
+
     if ! SOURCE_REAL=$(canonical_bundle_path "$SOURCE_APP"); then
         echo "→ Error: Could not resolve the built app path." >&2
         exit 1
@@ -290,6 +329,11 @@ main() {
         fi
         trap - EXIT HUP INT TERM
     fi
+
+    # Make the installed copy the one Launch Services knows about, and point
+    # out any other GlanceBar.app that could be launched instead of it.
+    "$LS_REGISTER" -f "$INSTALL_APP" 2>/dev/null || true
+    report_duplicate_bundles "$INSTALL_APP" "$INSTALL_REAL"
 
     # Purge all traces of the old bundle ID — Tahoe caches menu bar permissions
     # per bundle ID and leaves ghost entries behind that we need to clear
