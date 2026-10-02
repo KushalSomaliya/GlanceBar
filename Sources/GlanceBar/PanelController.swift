@@ -10,6 +10,8 @@ class PanelController {
     private var clickOutsideMonitor: Any?
     private var escapeMonitor: Any?
     private var onPanelShow: (() -> Void)?
+    private var webViewTopConstraint: NSLayoutConstraint!
+    private var bannerTopConstraint: NSLayoutConstraint!
     private(set) var isVisible = false
     private(set) var isPinnedToDesktop = false
     private var isAnimating = false
@@ -54,8 +56,9 @@ class PanelController {
         webView.translatesAutoresizingMaskIntoConstraints = false
         visualEffectView.addSubview(webView)
 
+        webViewTopConstraint = webView.topAnchor.constraint(equalTo: visualEffectView.topAnchor)
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: visualEffectView.topAnchor),
+            webViewTopConstraint,
             webView.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor),
@@ -63,12 +66,16 @@ class PanelController {
 
         updateBanner.translatesAutoresizingMaskIntoConstraints = false
         visualEffectView.addSubview(updateBanner)
+        bannerTopConstraint = updateBanner.topAnchor.constraint(equalTo: visualEffectView.topAnchor, constant: 10)
         NSLayoutConstraint.activate([
-            updateBanner.topAnchor.constraint(equalTo: visualEffectView.topAnchor, constant: 10),
+            bannerTopConstraint,
             updateBanner.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor, constant: 10),
             updateBanner.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor, constant: -10),
             updateBanner.heightAnchor.constraint(equalToConstant: 40),
         ])
+        updateBanner.onVisibilityChanged = { [weak self] _ in
+            self?.layoutBannerInsets()
+        }
 
         webViewController.loadWidget()
         updateVisualEffectAppearance()
@@ -81,6 +88,36 @@ class PanelController {
             panel.orderFront(nil)
             isVisible = true
         }
+        layoutBannerInsets()
+    }
+
+    // MARK: - Banner Layout
+
+    /// Height of the menu bar strip the slide-in panel sits under. The panel
+    /// spans the full screen height and floats below the menu bar's window
+    /// level, so anything pinned to its top edge must clear this (37pt on
+    /// notched MacBooks, ~25pt elsewhere) or it is drawn behind the menu bar
+    /// with only a sliver peeking out above the widget's search bar.
+    private func menuBarInset(for screen: NSScreen?) -> CGFloat {
+        guard let screen else { return 0 }
+        return max(0, screen.frame.maxY - screen.visibleFrame.maxY)
+    }
+
+    /// Keeps the update banner fully visible below the menu bar and, while it
+    /// is showing, pushes the web view down to the banner's top edge so the
+    /// banner never covers the widget. The default widget pads its body by
+    /// 48px (to clear the menu bar), so its content then starts just below
+    /// the 40pt banner.
+    private func layoutBannerInsets(on screen: NSScreen? = nil) {
+        let inset: CGFloat
+        if isPinnedToDesktop {
+            // Pinned panels are placed inside visibleFrame, already below the menu bar.
+            inset = 10
+        } else {
+            inset = menuBarInset(for: screen ?? panel.screen ?? activationScreen) + 8
+        }
+        bannerTopConstraint.constant = inset
+        webViewTopConstraint.constant = updateBanner.isHidden ? 0 : inset
     }
 
     func toggle() {
@@ -172,6 +209,7 @@ class PanelController {
 
         let screenFrame = screen.frame
         let panelWidth = preferencesManager.panelWidth
+        layoutBannerInsets(on: screen)
 
         let startFrame = NSRect(
             x: screenFrame.maxX,
@@ -291,6 +329,7 @@ class PanelController {
         preferencesManager.isPinnedToDesktop = true
         removeDismissMonitors()
         applyDesktopPinMode()
+        layoutBannerInsets()
 
         if !isVisible {
             guard let screen = NSScreen.main else { return }

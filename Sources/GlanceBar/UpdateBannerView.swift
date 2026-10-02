@@ -7,10 +7,14 @@ final class UpdateBannerView: NSView {
     var onUpdate: (() -> Void)?
     var onRestart: (() -> Void)?
     var onDismiss: (() -> Void)?
+    /// Fires when the banner appears or disappears so the panel can reflow
+    /// the web view around it instead of letting the banner cover content.
+    var onVisibilityChanged: ((Bool) -> Void)?
 
     private enum Action {
         case update
         case restart
+        case custom(() -> Void)
     }
 
     private let label = NSTextField(labelWithString: "")
@@ -114,6 +118,16 @@ final class UpdateBannerView: NSView {
         present(text: text, buttonTitle: "Retry", showsClose: true, spinning: false)
     }
 
+    /// Generic notice with one action button (e.g. a stale duplicate install).
+    /// `text` must be short enough for the label; `tooltip` carries the full
+    /// explanation.
+    func showNotice(
+        _ text: String, buttonTitle: String, tooltip: String? = nil, handler: @escaping () -> Void
+    ) {
+        action = .custom(handler)
+        present(text: text, buttonTitle: buttonTitle, showsClose: true, spinning: false, tooltip: tooltip)
+    }
+
     /// Info message that auto-hides ("You're up to date", check failures).
     func showTransient(_ text: String) {
         present(text: text, buttonTitle: nil, showsClose: true, spinning: false)
@@ -125,14 +139,19 @@ final class UpdateBannerView: NSView {
     func hide() {
         autoHideTimer?.invalidate()
         autoHideTimer = nil
+        let wasVisible = !isHidden
         isHidden = true
+        if wasVisible { onVisibilityChanged?(false) }
     }
 
-    private func present(text: String, buttonTitle: String?, showsClose: Bool, spinning: Bool) {
+    private func present(
+        text: String, buttonTitle: String?, showsClose: Bool, spinning: Bool, tooltip: String? = nil
+    ) {
         autoHideTimer?.invalidate()
         autoHideTimer = nil
         label.stringValue = text
-        label.toolTip = text
+        label.toolTip = tooltip ?? text
+        toolTip = tooltip ?? text
         if let buttonTitle {
             actionButton.title = buttonTitle
             actionButton.isHidden = false
@@ -149,12 +168,14 @@ final class UpdateBannerView: NSView {
             context.duration = 0.2
             animator().alphaValue = 1
         }
+        onVisibilityChanged?(true)
     }
 
     @objc private func actionClicked() {
         switch action {
         case .update: onUpdate?()
         case .restart: onRestart?()
+        case .custom(let handler): handler()
         }
     }
 

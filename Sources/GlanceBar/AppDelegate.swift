@@ -14,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateManager: UpdateManager!
     private var lastOfferedUpdateCommit: String?
     private var isUpdateOfferVisible = false
+    private var visibleDuplicateInstall: DuplicateInstall?
     private var widgetFilePathObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -61,6 +62,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         setupUpdateSystem()
+        checkForDuplicateInstalls()
 
         // Re-apply theme when macOS appearance changes (light/dark schedule)
         DistributedNotificationCenter.default().addObserver(
@@ -104,12 +106,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let banner = panelController.updateBanner
         banner.onUpdate = { [weak self] in
             self?.isUpdateOfferVisible = false
+            self?.visibleDuplicateInstall = nil
             banner.showProgress("Starting update...")
             self?.updateManager.runUpdate()
         }
         banner.onRestart = { [weak self] in self?.restart() }
         banner.onDismiss = { [weak self] in
             guard let self else { return }
+            if let duplicate = self.visibleDuplicateInstall {
+                self.visibleDuplicateInstall = nil
+                self.preferencesManager.dismissedDuplicateInstall = duplicate.identity
+            }
             let dismissedUpdateOffer = self.isUpdateOfferVisible
             self.isUpdateOfferVisible = false
             guard dismissedUpdateOffer else { return }
@@ -118,6 +125,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateManager.onEvent = { [weak self] event in
             guard let self else { return }
             self.isUpdateOfferVisible = false
+            self.visibleDuplicateInstall = nil
             let banner = self.panelController.updateBanner
             switch event {
             case .status(let text): banner.showProgress(text)
@@ -143,6 +151,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let commit, commit == self.preferencesManager.dismissedUpdateCommit { return }
             self.lastOfferedUpdateCommit = commit
             self.isUpdateOfferVisible = true
+            self.visibleDuplicateInstall = nil
             self.panelController.updateBanner.showUpdateAvailable(summary)
         }
     }
@@ -154,6 +163,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateChecker.checkForUpdates(force: true) { [weak self] status in
             guard let self, !self.updateManager.isRunning else { return }
             let banner = self.panelController.updateBanner
+            self.visibleDuplicateInstall = nil
             switch status {
             case .upToDate:
                 self.isUpdateOfferVisible = false
@@ -199,6 +209,138 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.terminate(nil)
+    }
+
+    // MARK: - Duplicate installs
+
+    /// Another GlanceBar.app registered with Launch Services that was built
+    /// from different code than this binary.
+    private struct DuplicateInstall {
+        let url: URL
+        let version: String?
+        let buildCommit: String?
+        let isNewer: Bool
+
+        /// Stable identity for remembering dismissals.
+        var identity: String { "\(url.path)|\(buildCommit ?? version ?? "unknown")" }
+    }
+
+    /// Spotlight, Raycast and Login Items resolve "GlanceBar" through Launch
+    /// Services, which can pick a stale copy (an old /Applications drag, a
+    /// leftover dev build) over the one the `glancebar` alias opens. A stale
+    /// copy looks alive but runs old code — pre-1.1.5 builds, for example,
+    /// ran actions with the bare launchd PATH, so scripts failed unless the
+    /// app was started from a terminal. Each copy also rewrites the default
+    /// widget HTML to its own template, so the UI flips with whichever copy
+    /// launched last. Surface such copies in the native banner so the user
+    /// can trash them (or, when the other copy is newer, switch to it).
+    private func checkForDuplicateInstalls() {
+        guard let duplicate = findDuplicateInstalls().first else { return }
+        guard duplicate.identity != preferencesManager.dismissedDuplicateInstall else { return }
+        showDuplicateInstallNotice(duplicate)
+    }
+
+    private func findDuplicateInstalls() -> [DuplicateInstall] {
+        let fm = FileManager.default
+        let myURL = Bundle.main.bundleURL.standardizedFileURL.resolvingSymlinksInPath()
+        let myCommit = AppConstants.buildCommit
+        let myVersion = UpdateChecker.versionComponents(AppConstants.version)
+        var seen: Set<String> = [myURL.path]
+        var duplicates: [DuplicateInstall] = []
+
+        for bundleID in [AppConstants.bundleIdentifier, AppConstants.legacyBundleIdentifier] {
+            for candidate in NSWorkspace.shared.urlsForApplications(withBundleIdentifier: bundleID) {
+                let url = candidate.standardizedFileURL.resolvingSymlinksInPath()
+                guard seen.insert(url.path).inserted else { continue }
+                // Copies already in the Trash cannot be launched by anyone.
+                guard !url.pathComponents.contains(".Trash") else { continue }
+                let plistURL = url.appendingPathComponent("Contents/Info.plist")
+                guard fm.fileExists(atPath: plistURL.path),
+                    let info = NSDictionary(contentsOf: plistURL) as? [String: Any]
+                else { continue }
+
+                let rawCommit = (info["GlanceBarBuildCommit"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let commit = (rawCommit == nil || rawCommit == "" || rawCommit == "unknown") ? nil : rawCommit
+                let version = info["CFBundleShortVersionString"] as? String
+
+                // Same commit as this binary (e.g. the build output update.sh
+                // leaves in ~/.glancebar-src) is identical code — harmless.
+                if let commit, commit == myCommit { continue }
+                // Two unstamped builds of the same version are indistinguishable.
+                if commit == nil, myCommit == nil, version == AppConstants.version { continue }
+
+                let isNewer = version.map {
+                    UpdateChecker.compare(UpdateChecker.versionComponents($0), myVersion) > 0
+                } ?? false
+                duplicates.append(
+                    DuplicateInstall(url: url, version: version, buildCommit: commit, isNewer: isNewer))
+            }
+        }
+        return duplicates
+    }
+
+    private func showDuplicateInstallNotice(_ duplicate: DuplicateInstall) {
+        let banner = panelController.updateBanner
+        let path = (duplicate.url.path as NSString).abbreviatingWithTildeInPath
+        let folder = (duplicate.url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath
+        let otherVersion = duplicate.version.map { "v\($0)" } ?? "unstamped build"
+        isUpdateOfferVisible = false
+        visibleDuplicateInstall = duplicate
+
+        if duplicate.isNewer {
+            banner.showNotice(
+                "Newer copy (\(otherVersion)) in \(folder)",
+                buttonTitle: "Open",
+                tooltip: "A newer GlanceBar (\(otherVersion)) is installed at \(path). "
+                    + "This copy (v\(AppConstants.version)) is out of date — open the newer one instead; "
+                    + "it takes over from this copy."
+            ) { [weak self] in
+                self?.visibleDuplicateInstall = nil
+                banner.hide()
+                NSWorkspace.shared.openApplication(
+                    at: duplicate.url, configuration: NSWorkspace.OpenConfiguration()
+                ) { _, _ in }
+            }
+        } else {
+            banner.showNotice(
+                "Stale copy (\(otherVersion)) in \(folder)",
+                buttonTitle: "Trash",
+                tooltip: "Another GlanceBar (\(otherVersion)) is installed at \(path). "
+                    + "Spotlight, Raycast and Login Items can launch that stale copy instead of this one "
+                    + "(v\(AppConstants.version)), so GlanceBar looks like it is running but with old code. "
+                    + "Move it to the Trash so only this copy can start."
+            ) { [weak self] in
+                self?.trashDuplicateInstall(duplicate)
+            }
+        }
+    }
+
+    private func trashDuplicateInstall(_ duplicate: DuplicateInstall) {
+        let banner = panelController.updateBanner
+        visibleDuplicateInstall = nil
+        // Quit any running instance of that copy first so it cannot keep
+        // owning the hotkey or come back on top after its bundle is gone.
+        let bundlePrefix = duplicate.url.path + "/"
+        for app in NSWorkspace.shared.runningApplications {
+            guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+                let executable = app.executableURL?.standardizedFileURL.resolvingSymlinksInPath(),
+                executable.path.hasPrefix(bundlePrefix)
+            else { continue }
+            app.terminate()
+        }
+        NSWorkspace.shared.recycle([duplicate.url]) { [weak self] _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let error {
+                    banner.showTransient("Could not trash it: \(error.localizedDescription)")
+                } else {
+                    banner.showTransient("Moved the stale copy to the Trash \u{2713}")
+                    // Surface the next duplicate, if there is more than one.
+                    self.checkForDuplicateInstalls()
+                }
+            }
+        }
     }
 
     /// Terminates other running GlanceBar instances (any bundle ID vintage)

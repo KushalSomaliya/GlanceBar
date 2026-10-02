@@ -19,6 +19,7 @@ class PreferencesManager {
         static let shortcutKeyCode = "shortcutKeyCode"
         static let shortcutModifiers = "shortcutModifiers"
         static let dismissedUpdateCommit = "dismissedUpdateCommit"
+        static let dismissedDuplicateInstall = "dismissedDuplicateInstall"
     }
 
     /// Remote commit the user dismissed the update banner for — that exact
@@ -26,6 +27,13 @@ class PreferencesManager {
     var dismissedUpdateCommit: String? {
         get { defaults.string(forKey: Keys.dismissedUpdateCommit) }
         set { defaults.set(newValue, forKey: Keys.dismissedUpdateCommit) }
+    }
+
+    /// Identity ("path|build") of a duplicate GlanceBar.app the user chose to
+    /// ignore — that exact copy isn't flagged again, but a different one is.
+    var dismissedDuplicateInstall: String? {
+        get { defaults.string(forKey: Keys.dismissedDuplicateInstall) }
+        set { defaults.set(newValue, forKey: Keys.dismissedDuplicateInstall) }
     }
 
     var hotCorner: ScreenCorner {

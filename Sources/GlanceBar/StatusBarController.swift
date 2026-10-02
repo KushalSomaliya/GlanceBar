@@ -83,10 +83,18 @@ class StatusBarController {
 
         menu.addItem(.separator())
 
+        let buildSuffix = AppConstants.buildCommit.map { " (\($0.prefix(7)))" } ?? ""
         let versionItem = menu.addItem(
-            withTitle: "GlanceBar v\(AppConstants.version)", action: nil, keyEquivalent: ""
+            withTitle: "GlanceBar v\(AppConstants.version)\(buildSuffix)", action: nil, keyEquivalent: ""
         )
         versionItem.isEnabled = false
+
+        // Which copy is running matters when several GlanceBar.app bundles
+        // exist — Spotlight, Raycast and Login Items may launch a different
+        // one than the `glancebar` alias. Clicking reveals it in Finder.
+        let bundlePath = (Bundle.main.bundlePath as NSString).abbreviatingWithTildeInPath
+        menu.addItem(withTitle: "Running from \(bundlePath)", action: #selector(menuRevealBundle), keyEquivalent: "")
+            .target = self
 
         menu.addItem(withTitle: "Check for Updates...", action: #selector(menuCheckForUpdates), keyEquivalent: "")
             .target = self
@@ -113,6 +121,9 @@ class StatusBarController {
     @objc private func menuOpenFolder() { onOpenFolder() }
     @objc private func menuPreferences() { onPreferences() }
     @objc private func menuCheckForUpdates() { onCheckForUpdates() }
+    @objc private func menuRevealBundle() {
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+    }
     @objc private func menuRestart() { onRestart() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 }

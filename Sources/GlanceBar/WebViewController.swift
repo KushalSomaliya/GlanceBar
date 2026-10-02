@@ -328,6 +328,10 @@ class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDelegate 
             // Finder/LaunchServices supplies only a minimal PATH, while setup is split across .zprofile (Homebrew) and .zshrc (nvm), so use an interactive login shell.
             process.arguments = ["-l", "-i", "-c", command]
             process.environment = environment
+            // Never hand the command a terminal: an interactive rc file that
+            // prompts (e.g. a shell framework's update check) must see EOF,
+            // not block until the timeout, regardless of how the app was launched.
+            process.standardInput = FileHandle.nullDevice
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
             process.standardOutput = stdoutPipe

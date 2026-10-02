@@ -5,6 +5,7 @@ A lightweight macOS menu bar app that provides a custom widget sidebar panel wit
 ## Known Issues
 
 - **Invisible menu bar icon on macOS Tahoe** — after many rebuild cycles, the icon may disappear even though the app runs and Cmd+] works. Full troubleshooting guide: [`docs/troubleshooting-invisible-icon.md`](docs/troubleshooting-invisible-icon.md). TL;DR: change `CFBundleIdentifier`.
+- **"Running but broken" (copy works, scripts fail, odd strip above the search bar), usually after a reboot or a Spotlight/Raycast launch** — a stale duplicate `GlanceBar.app` is being launched instead of the one the `glancebar` alias opens. Guide: [`docs/troubleshooting-stale-copy.md`](docs/troubleshooting-stale-copy.md). The app now flags duplicates in the native banner (Trash/Open) and the status menu shows "Running from …".
 
 ## Development Workflow
 
@@ -64,6 +65,12 @@ A lightweight macOS menu bar app that provides a custom widget sidebar panel wit
 - **Widget HTML refresh is hash-gated** (`WidgetTemplate`): the file is only regenerated when its SHA-256 matches the sidecar (`~/.glancebar/.default-widget-sha256`) or a known historical default hash; a backup (`index.html.bak`) is written first. User-customized files are never touched.
 - **Single-instance guard**: `AppDelegate.terminateOlderInstances()` kills earlier-launched GlanceBar instances (both bundle IDs) — a stale copy owning the panel with a newer HTML file was the main cause of "Bridge unavailable" errors.
 - The widget JS also self-heals: if `window.GlanceBar` is missing/incomplete, it rebuilds the bridge on `webkit.messageHandlers.glancebar`, and action calls have a watchdog timeout instead of hanging forever.
+
+### Duplicate Installs & Banner Placement
+
+- **Several `GlanceBar.app` bundles = nondeterministic launches.** The `glancebar` alias opens one path; Spotlight, Raycast and Login Items resolve through Launch Services and may pick another (older) copy, which then kills the newer-launched instance via the single-instance guard. Pre-1.1.5 copies also ran actions with the launchd PATH, so scripts only worked when the app was started from a terminal (`open` passes the terminal's environment). `AppDelegate.checkForDuplicateInstalls()` queries `NSWorkspace.urlsForApplications(withBundleIdentifier:)` for both bundle IDs, ignores copies built from the same commit, and shows a native banner notice (Trash, or Open when the other copy is newer). Dismissals are remembered per copy (`dismissedDuplicateInstall`).
+- **The slide-in panel spans the full screen height, under the menu bar.** Anything pinned to its top edge must clear `screen.frame.maxY - screen.visibleFrame.maxY` (37pt on notched MacBooks). The banner used to sit at +10 and was mostly hidden behind the menu bar; `PanelController.layoutBannerInsets()` now places it below the menu bar and, while it is visible, moves the web view's top down to the banner's top so the banner never covers the widget's search bar (the default widget's 48px body padding then lands content just under the banner).
+- Action commands get `stdin = /dev/null` so an interactive rc file that prompts can never hang until the timeout.
 
 ### Global Hotkey (Carbon API)
 
@@ -164,3 +171,5 @@ Data is stored separately in `~/.glancebar/data.json` and survives widget file c
 - `theme` — "auto", "dark", or "light"
 - `shortcutKey` — the key character for global hotkey (default: "]")
 - `shortcutModifiers` — NSEvent.ModifierFlags raw value (default: Command)
+- `dismissedUpdateCommit` — origin/main commit whose update offer was dismissed
+- `dismissedDuplicateInstall` — "path|build" of a duplicate GlanceBar.app the user chose to ignore
