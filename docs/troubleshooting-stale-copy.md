@@ -68,7 +68,11 @@ duplicates first; if the icon is still hidden after a relaunch, follow that doc 
 
 ## Prevention
 
-- Install/update only through `install.sh` / `glancebar-update` / the in-app updater — they replace the
-  existing bundle in place rather than creating a second one.
-- When developing, launch the build output (`open GlanceBar.app` in the checkout) only while the installed
-  copy is quit, and prefer `bash update.sh` (or `install.sh`) to put a build where the alias points.
+- Exactly one bundle, at `/Applications/GlanceBar.app`. Install/update only through `bash build.sh --install`
+  (development), `install.sh`, `glancebar-update` or the in-app updater — all replace the existing bundle
+  rather than creating a second one, and `build.sh --install` deletes the checkout bundle afterwards.
+- Never `open GlanceBar.app` from the checkout and never `cp` the app to a second folder. If the panel shows a
+  "Stale copy …" / "Newer copy …" banner, act on it.
+- Sign with the stable `GlanceBar Dev` identity (see
+  [`troubleshooting-invisible-icon.md`](troubleshooting-invisible-icon.md)) so copies and rebuilds stop
+  looking like different apps to macOS.

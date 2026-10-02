@@ -11,15 +11,22 @@ A lightweight macOS menu bar app that provides a custom widget sidebar panel wit
 
 **IMPORTANT: Always follow this sequence when making changes:**
 
-1. `pkill -f GlanceBar || true` — kill the running app first
-2. Make your code edits
-3. `rm -f ~/.glancebar/index.html` — only if DefaultWidget.swift changed (forces regeneration)
-4. **NEVER delete `~/.glancebar/data.json`** — this is the user's actual data.
-5. `swift build -c release` — compile
-6. `bash build.sh` — assemble .app bundle
-7. `open GlanceBar.app` — launch
+1. Make your code edits
+2. `rm -f ~/.glancebar/index.html` — only if DefaultWidget.swift changed (forces regeneration)
+3. **NEVER delete `~/.glancebar/data.json`** — this is the user's actual data.
+4. `bash build.sh --install` — compiles, assembles the bundle, quits the running app, replaces `/Applications/GlanceBar.app` (previous build goes to the Trash), re-signs it there, registers it with Launch Services, deletes the checkout bundle, and launches the installed copy.
 
-`open GlanceBar.app` runs the checkout build, which is a second bundle next to the installed `/Applications/GlanceBar.app`. Spotlight, Raycast and Login Items launch the installed one, so finish a dev session by installing the build you want to keep (quit the app, then `rm -rf /Applications/GlanceBar.app && cp -R GlanceBar.app /Applications/ && codesign --force --deep --sign - /Applications/GlanceBar.app`). The app flags a checkout build that differs from the installed commit in its banner — Open when it is newer, Trash when it is stale.
+`bash build.sh` without `--install` only compiles and assembles `./GlanceBar.app` for a build check; **never `open` that checkout bundle** — see the rules below. `swift build -c release` alone is fine for a quick compile check.
+
+### Rules that keep "stale duplicate copy" and "invisible icon" from coming back
+
+These two problems (Oct 2026) came from the same habit: launching checkout builds while an older copy sat in `/Applications`, each ad-hoc signed differently, all sharing one bundle ID.
+
+- **Exactly one bundle, at `/Applications/GlanceBar.app`.** Never `open GlanceBar.app` from the checkout, never `cp` a copy to `~/Applications`, Desktop, etc. Spotlight, Raycast and Login Items resolve "GlanceBar" through Launch Services and launch whichever copy they find; a stale one runs old code (pre-1.1.5: scripts fail with the launchd PATH), shows an out-of-date banner and rewrites the default widget to its template. `build.sh --install` deletes the checkout bundle after installing for exactly this reason. If the panel shows a "Stale copy …" or "Newer copy …" banner, act on it; `install.sh`/`update.sh` also print every other copy they find.
+- **Sign with a stable identity, not ad hoc.** `codesign --sign -` produces a new identity every build, so TCC (Accessibility for the hot corner) and Tahoe's per-app menu bar permission treat each rebuild as a new app; that churn is what eventually parked the icon off-screen. One-time setup: Keychain Access → Certificate Assistant → Create a Certificate… → Name `GlanceBar Dev`, Identity Type `Self-Signed Root`, Certificate Type `Code Signing` → Create. `build.sh`, `install.sh` and `update.sh` use it automatically whenever `security find-identity -v -p codesigning` lists it. If `codesign` then complains, open the certificate in Keychain Access → Trust → Code Signing: Always Trust. `GLANCEBAR_SIGN_IDENTITY=<name>` picks another identity, `GLANCEBAR_SIGN_IDENTITY=-` forces ad hoc. Verify: `codesign -dv /Applications/GlanceBar.app 2>&1 | grep -E 'Authority|TeamIdentifier'`.
+- **Permissions after a signing or bundle-ID change:** re-grant Accessibility to `/Applications/GlanceBar.app` (hot corner) and remove the greyed-out old rows in System Settings → Privacy & Security → Accessibility and → Login Items. Launch at Login and all preferences migrate automatically after a bundle-ID rotation.
+- **Rotating the bundle ID is the last resort** for a hidden icon (`docs/troubleshooting-invisible-icon.md` has the recipe and log). Not a dev-loop step.
+- `pkill -f GlanceBar || true` still stops a running instance by hand when needed.
 
 ## Architecture
 
@@ -73,7 +80,7 @@ A lightweight macOS menu bar app that provides a custom widget sidebar panel wit
 - **Several `GlanceBar.app` bundles = nondeterministic launches.** The `glancebar` alias opens one path; Spotlight, Raycast and Login Items resolve through Launch Services and may pick another (older) copy, which then kills the newer-launched instance via the single-instance guard. Pre-1.1.5 copies also ran actions with the launchd PATH, so scripts only worked when the app was started from a terminal (`open` passes the terminal's environment). `AppDelegate.checkForDuplicateInstalls()` queries `NSWorkspace.urlsForApplications(withBundleIdentifier:)` for every current and legacy bundle ID, ignores copies built from the same commit, and shows a native banner notice (Trash, or Open when the other copy is newer). Dismissals are remembered per copy (`dismissedDuplicateInstall`).
 - **The slide-in panel spans the full screen height, under the menu bar.** Anything pinned to its top edge must clear `screen.frame.maxY - screen.visibleFrame.maxY` (37pt on notched MacBooks). The banner used to sit at +10 and was mostly hidden behind the menu bar; `PanelController.layoutBannerInsets()` now places it below the menu bar and, while it is visible, moves the web view's top down to the banner's top so the banner never covers the widget's search bar (the default widget's 48px body padding then lands content just under the banner).
 - Action commands get `stdin = /dev/null` so an interactive rc file that prompts can never hang until the timeout.
-- **Hidden menu bar icon is reported, not silently tolerated.** `StatusBarController.isIconLikelyHidden()` (status item window far from the menu bar strip or off the active space, 2s after launch) drives a banner notice with a Help button; dismissal is remembered per build (`dismissedHiddenIconBuild`). `install.sh`/`update.sh` register the installed bundle with `lsregister -f` and print every other GlanceBar.app built from a different commit — they report, never delete.
+- **Hidden menu bar icon is reported, not silently tolerated.** `StatusBarController.isIconLikelyHidden()` says hidden when the status item's window overlaps no screen's top 60pt strip (unknown states — no window yet, zero frame — count as not hidden). `AppDelegate` samples it at 3s, then +8s, then +15s and shows the banner notice (Help button) only if every sample says hidden — a single early sample is unreliable right after launch or a `killall ControlCenter`/`Dock`. Dismissal is remembered per build (`dismissedHiddenIconBuild`). `install.sh`/`update.sh` register the installed bundle with `lsregister -f` and print every other GlanceBar.app built from a different commit — they report, never delete.
 
 ### Global Hotkey (Carbon API)
 

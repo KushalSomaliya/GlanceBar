@@ -235,31 +235,52 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         AppConstants.buildCommit ?? AppConstants.version
     }
 
+    /// Gaps between successive hidden-icon samples. Right after launch, and
+    /// especially after `killall ControlCenter` / `killall Dock`, the status
+    /// item window sits at a placeholder frame until the menu bar places it,
+    /// so a single early sample would cry wolf. Every sample must say hidden.
+    private static let hiddenIconSampleIntervals: [TimeInterval] = [3, 8, 15]
+
     /// macOS Tahoe can leave the status item alive but off-screen while the
     /// hotkey keeps working, which reads as "the app is broken". Say so in the
     /// panel and point at the fix instead of staying silent.
     private func checkForHiddenMenuBarIcon() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            guard let self, self.statusBarController.isIconLikelyHidden() else { return }
-            guard self.preferencesManager.dismissedHiddenIconBuild != Self.currentBuildIdentity else { return }
-            let banner = self.panelController.updateBanner
-            // A duplicate-install notice or update progress is more urgent — keep it.
-            guard banner.isHidden else { return }
-            self.visibleNotice = .hiddenIcon
-            banner.showNotice(
-                "Menu bar icon is hidden by macOS",
-                buttonTitle: "Help",
-                tooltip: "GlanceBar is running (the hotkey works) but macOS keeps its menu bar icon off-screen. "
-                    + "Remove duplicate GlanceBar.app copies, then check System Settings → Menu Bar → "
-                    + "Allow in the Menu Bar (or your menu bar manager). If it stays hidden, the known fix is "
-                    + "a new bundle identifier — see docs/troubleshooting-invisible-icon.md."
-            ) { [weak self] in
-                self?.visibleNotice = nil
-                banner.hide()
-                let docURL = "https://github.com/\(AppConstants.githubRepo)/blob/main/docs/troubleshooting-invisible-icon.md"
-                if let url = URL(string: docURL) {
-                    NSWorkspace.shared.open(url)
-                }
+        scheduleHiddenIconSample(index: 0)
+    }
+
+    private func scheduleHiddenIconSample(index: Int) {
+        guard index < Self.hiddenIconSampleIntervals.count else {
+            showHiddenMenuBarIconNotice()
+            return
+        }
+        let delay = Self.hiddenIconSampleIntervals[index]
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self else { return }
+            // One sample that sees the icon in a menu bar settles it.
+            guard self.statusBarController.isIconLikelyHidden() else { return }
+            self.scheduleHiddenIconSample(index: index + 1)
+        }
+    }
+
+    private func showHiddenMenuBarIconNotice() {
+        guard preferencesManager.dismissedHiddenIconBuild != Self.currentBuildIdentity else { return }
+        let banner = panelController.updateBanner
+        // A duplicate-install notice or update progress is more urgent — keep it.
+        guard banner.isHidden else { return }
+        visibleNotice = .hiddenIcon
+        banner.showNotice(
+            "Menu bar icon is hidden by macOS",
+            buttonTitle: "Help",
+            tooltip: "GlanceBar is running (the hotkey works) but macOS keeps its menu bar icon off-screen. "
+                + "Remove duplicate GlanceBar.app copies, then check System Settings → Menu Bar → "
+                + "Allow in the Menu Bar (or your menu bar manager). If it stays hidden, the known fix is "
+                + "a new bundle identifier — see docs/troubleshooting-invisible-icon.md."
+        ) { [weak self] in
+            self?.visibleNotice = nil
+            banner.hide()
+            let docURL = "https://github.com/\(AppConstants.githubRepo)/blob/main/docs/troubleshooting-invisible-icon.md"
+            if let url = URL(string: docURL) {
+                NSWorkspace.shared.open(url)
             }
         }
     }

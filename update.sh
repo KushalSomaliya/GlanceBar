@@ -147,6 +147,19 @@ main() {
         fi
     }
 
+    # Same rule as build.sh: a self-signed "GlanceBar Dev" certificate keeps one
+    # identity across rebuilds (TCC grants and Tahoe's menu bar state survive);
+    # GLANCEBAR_SIGN_IDENTITY overrides, "-" is ad hoc.
+    signing_identity() {
+        if [ -n "${GLANCEBAR_SIGN_IDENTITY:-}" ]; then
+            printf '%s\n' "$GLANCEBAR_SIGN_IDENTITY"
+        elif security find-identity -v -p codesigning 2>/dev/null | grep -q '"GlanceBar Dev"'; then
+            printf '%s\n' "GlanceBar Dev"
+        else
+            printf '%s\n' "-"
+        fi
+    }
+
     prepare_bundle() {
         local bundle="$1"
         local executable="$bundle/Contents/MacOS/GlanceBar"
@@ -167,8 +180,8 @@ main() {
             INSTALL_ERROR="Could not strip quarantine from the replacement app"
             return 1
         fi
-        if ! codesign --force --deep --sign - "$bundle" 2>/dev/null; then
-            INSTALL_ERROR="Could not sign the replacement app"
+        if ! codesign --force --deep --sign "$(signing_identity)" "$bundle" 2>/dev/null; then
+            INSTALL_ERROR="Could not sign the replacement app (identity: $(signing_identity))"
             return 1
         fi
         if ! codesign --verify --deep --strict "$bundle" 2>/dev/null; then

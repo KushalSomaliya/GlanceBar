@@ -1,12 +1,49 @@
 #!/bin/bash
 set -e
 
+# GlanceBar build script
+#
+#   bash build.sh            compile + assemble ./GlanceBar.app (nothing is launched)
+#   bash build.sh --install  additionally: quit the running app, replace
+#                            /Applications/GlanceBar.app (or $GLANCEBAR_INSTALL_DIR/GlanceBar.app)
+#                            with this build, re-sign it there, register it with Launch
+#                            Services, remove the checkout bundle, launch the installed copy.
+#
+# One installed bundle is the rule: Spotlight, Raycast and Login Items resolve
+# "GlanceBar" through Launch Services and will launch whatever copy they find,
+# so a checkout build that is left around becomes the "stale duplicate copy"
+# problem (docs/troubleshooting-stale-copy.md).
+#
+# Signing: ad-hoc signatures change on every build, so TCC grants (Accessibility
+# for the hot corner) and Tahoe's per-app menu bar state see each rebuild as a
+# new app. A self-signed "GlanceBar Dev" code-signing certificate in the login
+# keychain keeps one identity across rebuilds and is picked up automatically.
+# Override with GLANCEBAR_SIGN_IDENTITY=<name>, or GLANCEBAR_SIGN_IDENTITY=- for
+# ad hoc. See CLAUDE.md → Development Workflow.
+
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$PROJECT_DIR/.build/release"
 APP_DIR="$PROJECT_DIR/GlanceBar.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
+
+INSTALL=0
+for arg in "$@"; do
+    case "$arg" in
+        --install) INSTALL=1 ;;
+        -h|--help)
+            sed -n '4,22p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) echo "Unknown option: $arg (try --help)" >&2; exit 2 ;;
+    esac
+done
+
+fail() {
+    echo "Error: $*" >&2
+    exit 1
+}
 
 echo "Building GlanceBar..."
 cd "$PROJECT_DIR"
@@ -28,11 +65,6 @@ cp "$PROJECT_DIR/Resources/Info.plist" "$CONTENTS_DIR/"
 # update exists, and update.sh reads it to know if the installed app is stale.
 PLIST_BUDDY=/usr/libexec/PlistBuddy
 PLIST="$CONTENTS_DIR/Info.plist"
-
-fail() {
-    echo "Error: $*" >&2
-    exit 1
-}
 
 BUILD_COMMIT="unknown"
 BUILD_DIRTY=true
@@ -80,11 +112,68 @@ stamp_plist_value GlanceBarBuildDirty bool "$BUILD_DIRTY"
 stamp_plist_value CFBundleShortVersionString string "$APP_VERSION"
 stamp_plist_value CFBundleVersion string "$APP_VERSION"
 
-# Codesign (ad-hoc for local use)
-codesign --force --sign - "$APP_DIR" 2>/dev/null || true
+# Codesign — stable identity when one exists, ad hoc otherwise (see header).
+SIGN_IDENTITY="${GLANCEBAR_SIGN_IDENTITY:-}"
+if [ -z "$SIGN_IDENTITY" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q '"GlanceBar Dev"'; then
+    SIGN_IDENTITY="GlanceBar Dev"
+fi
 
+sign_bundle() {
+    local bundle="$1"
+    if [ -n "$SIGN_IDENTITY" ] && [ "$SIGN_IDENTITY" != "-" ]; then
+        if ! codesign --force --deep --sign "$SIGN_IDENTITY" "$bundle"; then
+            fail "codesign with '$SIGN_IDENTITY' failed. In Keychain Access set that certificate's Code Signing trust to Always Trust, or run with GLANCEBAR_SIGN_IDENTITY=- to sign ad hoc."
+        fi
+    else
+        codesign --force --deep --sign - "$bundle" 2>/dev/null || true
+    fi
+}
+
+sign_bundle "$APP_DIR"
+if [ -n "$SIGN_IDENTITY" ] && [ "$SIGN_IDENTITY" != "-" ]; then
+    echo "Signed with identity: $SIGN_IDENTITY"
+else
+    echo "Signed ad hoc. Create a 'GlanceBar Dev' code-signing certificate so permissions survive rebuilds (CLAUDE.md → Development Workflow)."
+fi
+
+if [ "$INSTALL" = "0" ]; then
+    echo ""
+    echo "Build complete: $APP_DIR"
+    echo ""
+    echo "To install and launch:  bash build.sh --install"
+    exit 0
+fi
+
+INSTALL_DIR="${GLANCEBAR_INSTALL_DIR:-/Applications}"
+INSTALL_APP="$INSTALL_DIR/GlanceBar.app"
+# End-anchored: the app's command line is exactly its executable path, while a
+# shell whose command line merely mentions the path must not be matched.
+GLANCEBAR_PROCESS='GlanceBar\.app/Contents/MacOS/GlanceBar$'
+LS_REGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+
+echo "Installing to $INSTALL_APP..."
+pkill -f "$GLANCEBAR_PROCESS" 2>/dev/null || true
+for _ in $(seq 1 50); do
+    pgrep -f "$GLANCEBAR_PROCESS" >/dev/null 2>&1 || break
+    sleep 0.1
+done
+
+mkdir -p "$INSTALL_DIR"
+if [ -d "$INSTALL_APP" ]; then
+    # Keep the previous build recoverable instead of deleting it.
+    mkdir -p "$HOME/.Trash"
+    mv "$INSTALL_APP" "$HOME/.Trash/GlanceBar-replaced-$(date +%Y%m%d-%H%M%S).app"
+fi
+cp -R "$APP_DIR" "$INSTALL_APP"
+xattr -rd com.apple.quarantine "$INSTALL_APP" 2>/dev/null || true
+# Sign again at the final path: Tahoe keeps per-path provenance for ad-hoc apps.
+sign_bundle "$INSTALL_APP"
+"$LS_REGISTER" -f "$INSTALL_APP" 2>/dev/null || true
+
+# The checkout bundle is now a second copy of this exact build. Remove it so
+# Spotlight, Raycast and Login Items can only ever find the installed one.
+rm -rf "$APP_DIR"
+
+open "$INSTALL_APP"
 echo ""
-echo "Build complete: $APP_DIR"
-echo ""
-echo "To run:  open $APP_DIR"
-echo "To install: cp -r $APP_DIR /Applications/"
+echo "Installed and launched: $INSTALL_APP"

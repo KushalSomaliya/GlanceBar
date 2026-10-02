@@ -75,7 +75,13 @@ cp -r "$SRC_DIR/GlanceBar.app" "$APP_DIR/$APP_NAME"
 # Re-sign at the final install path and strip quarantine — Tahoe's Gatekeeper
 # shows a bogus "damaged" dialog for ad-hoc bundles with stale provenance.
 xattr -rd com.apple.quarantine "$APP_DIR/$APP_NAME" 2>/dev/null || true
-codesign --force --deep --sign - "$APP_DIR/$APP_NAME" 2>/dev/null || true
+# Same rule as build.sh: a self-signed "GlanceBar Dev" certificate keeps one
+# identity across rebuilds; GLANCEBAR_SIGN_IDENTITY overrides, "-" is ad hoc.
+SIGN_IDENTITY="${GLANCEBAR_SIGN_IDENTITY:-}"
+if [ -z "$SIGN_IDENTITY" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q '"GlanceBar Dev"'; then
+    SIGN_IDENTITY="GlanceBar Dev"
+fi
+codesign --force --deep --sign "${SIGN_IDENTITY:--}" "$APP_DIR/$APP_NAME" 2>/dev/null || true
 echo "→ Installed to $APP_DIR/$APP_NAME"
 
 # Register this copy with Launch Services and point out any other GlanceBar.app

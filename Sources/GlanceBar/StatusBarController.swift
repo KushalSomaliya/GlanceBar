@@ -117,14 +117,23 @@ class StatusBarController {
 
     /// macOS Tahoe can keep a status item "allowed" yet park its window
     /// off-screen (docs/troubleshooting-invisible-icon.md shows frames like
-    /// (0, -5, 38, 22) with isOnActiveSpace == false). True when the item's
-    /// window is nowhere near the menu bar strip of its screen. An item the
-    /// user removed themselves (isVisible == false) is not a hidden one.
+    /// (0, -5, 38, 22)). A visible status item's window overlaps the menu bar
+    /// strip at the top of some screen; a hidden one overlaps none. Returns
+    /// false when the answer is unknown (no window yet, zero-size frame, user
+    /// removed the item) so a transient state during launch or a menu bar
+    /// restart never raises a false alarm on its own.
     func isIconLikelyHidden() -> Bool {
-        guard statusItem.isVisible else { return false }
-        guard let window = statusItem.button?.window else { return true }
-        guard let screen = window.screen ?? NSScreen.main else { return true }
-        return window.frame.maxY < screen.frame.maxY - 60 || !window.isOnActiveSpace
+        guard statusItem.isVisible, let window = statusItem.button?.window else { return false }
+        let frame = window.frame
+        guard frame.width > 0, frame.height > 0 else { return false }
+        let stripHeight: CGFloat = 60
+        let overlapsAMenuBar = NSScreen.screens.contains { screen in
+            let strip = NSRect(
+                x: screen.frame.minX, y: screen.frame.maxY - stripHeight,
+                width: screen.frame.width, height: stripHeight)
+            return strip.intersects(frame)
+        }
+        return !overlapsAMenuBar
     }
 
     @objc private func menuToggle() { onToggle() }

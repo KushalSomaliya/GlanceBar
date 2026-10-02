@@ -85,10 +85,20 @@ Accessibility and → Login Items.
 
 ## How to avoid it in the first place
 
-The corruption builds up over many rebuild cycles. To prevent:
+The corruption builds up over many rebuild cycles — and faster when several differently signed copies share
+the bundle ID (the Oct 2026 case: a stale `/Applications` copy plus checkout builds). To prevent:
 
-- **Don't rebuild dozens of times while the app is installed.** Uninstall between major rebuild sessions.
-- **Use Developer ID signing** if you have an Apple Developer account ($99/year). Stable code signatures mean Tahoe doesn't keep re-evaluating permissions for "new" binaries every rebuild. Free Apple ID "Apple Development" certificates also work.
+- **Keep one bundle and install through `bash build.sh --install`.** It replaces `/Applications/GlanceBar.app`
+  and deletes the checkout bundle, so no second copy is ever registered. Never `open` a checkout build. See
+  [`troubleshooting-stale-copy.md`](troubleshooting-stale-copy.md).
+- **Sign with a stable identity.** Ad-hoc signatures (`codesign --sign -`) get a new identity on every build.
+  Create a self-signed code-signing certificate once — Keychain Access → Certificate Assistant → Create a
+  Certificate… → Name `GlanceBar Dev`, Identity Type `Self-Signed Root`, Certificate Type `Code Signing` —
+  and `build.sh`, `install.sh` and `update.sh` pick it up automatically (`security find-identity -v -p
+  codesigning` must list it; set its Code Signing trust to Always Trust if `codesign` complains). A Developer
+  ID or free "Apple Development" certificate works the same way via `GLANCEBAR_SIGN_IDENTITY=<name>`. Stable
+  signatures also keep the Accessibility grant for the hot corner across rebuilds.
+- **Don't rebuild dozens of times while the app is installed** if you are stuck with ad-hoc signing.
 - **Don't toggle "Allow in Menu Bar" rapidly.** It seems to stick in a bad state if toggled many times quickly.
 
 ## How to confirm you've hit this specific bug
@@ -114,10 +124,11 @@ If `window.frame.origin.y` is negative (like `-5` or `-17`) and `isOnActiveSpace
 
 ## Detection in-app
 
-GlanceBar does this itself now: `StatusBarController.isIconLikelyHidden()` checks the status item's window
-two seconds after launch, and `AppDelegate.checkForHiddenMenuBarIcon()` shows a "Menu bar icon is hidden by
-macOS" notice in the panel banner (Help opens this doc). Dismissing it silences the notice until the next
-rebuild. Also check for duplicate `GlanceBar.app` copies first — see
+GlanceBar does this itself now: `StatusBarController.isIconLikelyHidden()` reports hidden when the status
+item's window overlaps no screen's menu bar strip, and `AppDelegate.checkForHiddenMenuBarIcon()` samples it at
+3s, +8s and +15s after launch — the status item can sit at a placeholder frame right after launch or after a
+`killall ControlCenter` — and shows a "Menu bar icon is hidden by macOS" notice in the panel banner only when
+every sample agrees (Help opens this doc). Dismissing it silences the notice until the next rebuild. Also check for duplicate `GlanceBar.app` copies first — see
 [`troubleshooting-stale-copy.md`](troubleshooting-stale-copy.md); several differently-signed copies sharing one
 bundle ID is the setup that most often ends here.
 
