@@ -34,10 +34,7 @@ class StatusBarController {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(
-                systemSymbolName: "sidebar.right",
-                accessibilityDescription: "GlanceBar"
-            )
+            button.image = MenuBarIcon.image()
             button.action = #selector(statusBarButtonClicked(_:))
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])

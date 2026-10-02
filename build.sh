@@ -60,6 +60,20 @@ cp "$BUILD_DIR/GlanceBar" "$MACOS_DIR/"
 # Copy Info.plist
 cp "$PROJECT_DIR/Resources/Info.plist" "$CONTENTS_DIR/"
 
+# App icon. Resources/AppIcon.iconset holds the PNGs rendered from
+# Resources/AppIcon.svg (scripts/render-app-icon.js); iconutil, part of macOS,
+# packs them into the AppIcon.icns that Info.plist's CFBundleIconFile names.
+ICONSET="$PROJECT_DIR/Resources/AppIcon.iconset"
+if [ -d "$ICONSET" ]; then
+    if command -v iconutil >/dev/null 2>&1; then
+        if ! iconutil -c icns "$ICONSET" -o "$RESOURCES_DIR/AppIcon.icns"; then
+            fail "iconutil could not build AppIcon.icns from $ICONSET"
+        fi
+    else
+        echo "Warning: iconutil not found; the bundle will show the generic app icon." >&2
+    fi
+fi
+
 # Stamp the source revision and version into the bundle. The update system
 # compares GlanceBarBuildCommit against origin/main to decide whether an
 # update exists, and update.sh reads it to know if the installed app is stale.
@@ -169,6 +183,8 @@ xattr -rd com.apple.quarantine "$INSTALL_APP" 2>/dev/null || true
 # Sign again at the final path: Tahoe keeps per-path provenance for ad-hoc apps.
 sign_bundle "$INSTALL_APP"
 "$LS_REGISTER" -f "$INSTALL_APP" 2>/dev/null || true
+# Finder and the Dock cache app icons by path; a fresh mtime makes them re-read it.
+touch "$INSTALL_APP"
 
 # The checkout bundle is now a second copy of this exact build. Remove it so
 # Spotlight, Raycast and Login Items can only ever find the installed one.

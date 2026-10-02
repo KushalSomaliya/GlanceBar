@@ -13,6 +13,7 @@ A lightweight macOS menu bar app that provides a custom widget sidebar panel wit
 
 1. Make your code edits
 2. `rm -f ~/.glancebar/index.html` — only if DefaultWidget.swift changed (forces regeneration)
+   - If `Resources/AppIcon.svg` or `AppIcon-small.svg` changed: `NODE_PATH="$(npm root -g)" node scripts/render-app-icon.js` (needs `npm install -g playwright`; uses the installed Google Chrome) and commit the regenerated `Resources/AppIcon.iconset/`. `build.sh` packs that iconset into `AppIcon.icns` with `iconutil` (part of macOS) on every build.
 3. **NEVER delete `~/.glancebar/data.json`** — this is the user's actual data.
 4. `bash build.sh --install` — compiles, assembles the bundle, quits the running app, replaces `/Applications/GlanceBar.app` (previous build goes to the Trash), re-signs it there, registers it with Launch Services, deletes the checkout bundle, and launches the installed copy.
 
@@ -54,6 +55,7 @@ These two problems (Oct 2026) came from the same habit: launching checkout build
 | `Sources/GlanceBar/HotCornerMonitor.swift`      | Mouse position tracking, corner detection state machine with debounce                         |
 | `Sources/GlanceBar/GlobalShortcutManager.swift` | Carbon RegisterEventHotKey global hotkey (default: Cmd+])                                     |
 | `Sources/GlanceBar/StatusBarController.swift`   | Menu bar icon + right-click context menu                                                      |
+| `Sources/GlanceBar/MenuBarIcon.swift`           | The menu bar glyph (pill + chevron), drawn in code as a template image                        |
 | `Sources/GlanceBar/PreferencesManager.swift`    | UserDefaults wrapper for all app settings                                                     |
 | `Sources/GlanceBar/PreferencesWindow.swift`     | SwiftUI preferences UI with theme picker, shortcut recorder, hot corner selector              |
 | `Sources/GlanceBar/DefaultWidget.swift`         | Default HTML/CSS/JS widget template (embedded as Swift string literal)                        |
@@ -64,6 +66,8 @@ These two problems (Oct 2026) came from the same habit: launching checkout build
 | `Sources/GlanceBar/LaunchAtLoginManager.swift`  | SMAppService login item management                                                            |
 | `Sources/GlanceBar/DesktopPinManager.swift`     | Desktop window level constants                                                                |
 | `Sources/GlanceBar/Constants.swift`             | App-wide constants, ScreenCorner enum, build-commit stamp accessor                            |
+| `Resources/AppIcon.svg`, `AppIcon-small.svg`    | App icon source (full artwork; simplified 16/32 px variant), 1024 canvas, 824 px artwork      |
+| `Resources/AppIcon.iconset/`                    | PNGs rendered from the SVGs by `scripts/render-app-icon.js`; `build.sh` packs them into `.icns` |
 
 ## Key Technical Decisions & Lessons Learned
 
@@ -83,6 +87,13 @@ These two problems (Oct 2026) came from the same habit: launching checkout build
 - **The slide-in panel spans the full screen height, under the menu bar.** Anything pinned to its top edge must clear `screen.frame.maxY - screen.visibleFrame.maxY` (37pt on notched MacBooks). The banner used to sit at +10 and was mostly hidden behind the menu bar; `PanelController.layoutBannerInsets()` now places it below the menu bar and, while it is visible, moves the web view's top down to the banner's top so the banner never covers the widget's search bar (the default widget's 48px body padding then lands content just under the banner).
 - Action commands get `stdin = /dev/null` so an interactive rc file that prompts can never hang until the timeout.
 - **Hidden menu bar icon is reported, not silently tolerated.** `StatusBarController.isIconLikelyHidden()` says hidden when the status item's window overlaps no screen's top 60pt strip (unknown states — no window yet, zero frame — count as not hidden). `AppDelegate` samples it at 3s, then +8s, then +15s and shows the banner notice (Help button) only if every sample says hidden — a single early sample is unreliable right after launch or a `killall ControlCenter`/`Dock`. Dismissal is remembered per build (`dismissedHiddenIconBuild`). `install.sh`/`update.sh` register the installed bundle with `lsregister -f` and print every other GlanceBar.app built from a different commit — they report, never delete.
+
+### App Icon & Menu Bar Glyph
+
+- **One mark for both** (concept "Handle", chosen Oct 2026 from the design canvas): a saffron pill at the right edge with a chevron pointing into it — the panel's edge handle — with the hidden panel faint behind it. Palette: ink `#171A23`, paper `#F2F3F6`, saffron `#F5B335`.
+- **App icon pipeline**: `Resources/AppIcon.svg` is the source on a 1024 canvas with the artwork on Apple's 824 px grid (the margin holds the drop shadow). `scripts/render-app-icon.js` renders it with headless Chrome into `Resources/AppIcon.iconset/` (committed), using `AppIcon-small.svg` for 16 and 32 px (no chevron or ghost panel, a wider pill: the full artwork turns to mush there). `build.sh` runs `iconutil -c icns` on the iconset into the bundle's `Resources/AppIcon.icns`; `Info.plist` names it with `CFBundleIconFile`. No rasterizer is needed for a normal build, only when the SVG changes.
+- **The menu bar glyph is drawn in code** (`MenuBarIcon.image()`, `NSImage(size:flipped:drawingHandler:)`, 18 × 18 pt, `isTemplate = true`) rather than loaded from a file: the bundle is hand-assembled by `build.sh` with no asset catalog, and a template image must be pure black + alpha anyway. macOS tints it for light/dark bars and the pressed state. It replaced the `sidebar.right` SF Symbol.
+- **Finder and the Dock cache icons by path.** `build.sh --install` touches the installed bundle after `lsregister -f`; if the generic icon still shows, `killall Dock` (and `killall Finder`) forces a re-read. The hidden-icon detector samples three times for exactly this reason, so that restart no longer trips it.
 
 ### Global Hotkey (Carbon API)
 
