@@ -82,6 +82,7 @@ Accessibility and → Login Items.
 | ---------- | ---------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
 | 2026-04-12 | `com.kushal.glancebar` | `dev.kushal.glancebar`  | Icon invisible after many ad-hoc rebuilds                                           |
 | 2026-10-02 | `dev.kushal.glancebar` | `dev.kushal.glancebar2` | Icon invisible again; two differently signed copies had shared the ID for months    |
+| 2026-10-02 | `dev.kushal.glancebar2` | `glancebar`            | Cosmetic, same day: a short permanent ID was preferred (not reverse-DNS on purpose) |
 
 ## How to avoid it in the first place
 
@@ -93,7 +94,7 @@ the bundle ID (the Oct 2026 case: a stale `/Applications` copy plus checkout bui
   [`troubleshooting-stale-copy.md`](troubleshooting-stale-copy.md).
 - **Sign with a stable identity.** Ad-hoc signatures (`codesign --sign -`) get a new identity on every build.
   Create a self-signed code-signing certificate once — Keychain Access → Certificate Assistant → Create a
-  Certificate… → Name `GlanceBar Dev`, Identity Type `Self-Signed Root`, Certificate Type `Code Signing` —
+  Certificate… → Name `GlanceBar`, Identity Type `Self-Signed Root`, Certificate Type `Code Signing` —
   and `build.sh`, `install.sh` and `update.sh` pick it up automatically (`security find-identity -v -p
   codesigning` must list it; set its Code Signing trust to Always Trust if `codesign` complains). A Developer
   ID or free "Apple Development" certificate works the same way via `GLANCEBAR_SIGN_IDENTITY=<name>`. Stable

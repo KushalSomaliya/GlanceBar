@@ -5,10 +5,14 @@ enum AppConstants {
     /// Must match CFBundleIdentifier in Resources/Info.plist. Rotated when macOS
     /// Tahoe's per-bundle-ID menu bar state goes bad (the icon stays hidden
     /// while the app runs); see docs/troubleshooting-invisible-icon.md.
-    static let bundleIdentifier = "dev.kushal.glancebar2"
+    /// Deliberately not reverse-DNS: the app is self-distributed, and a short
+    /// ID that never carried a corrupted state was wanted (see the rotation
+    /// log in the doc). Bundle IDs only need alphanumerics, hyphens and dots.
+    static let bundleIdentifier = "glancebar"
     /// Every previous bundle ID, newest first. Used to find and terminate
     /// stale copies and to migrate UserDefaults after a rotation.
     static let legacyBundleIdentifiers = [
+        "dev.kushal.glancebar2",  // Oct 2 2026, for a few hours
         "dev.kushal.glancebar",  // Apr–Oct 2026
         "com.kushal.glancebar",  // original
     ]

@@ -75,11 +75,11 @@ cp -r "$SRC_DIR/GlanceBar.app" "$APP_DIR/$APP_NAME"
 # Re-sign at the final install path and strip quarantine — Tahoe's Gatekeeper
 # shows a bogus "damaged" dialog for ad-hoc bundles with stale provenance.
 xattr -rd com.apple.quarantine "$APP_DIR/$APP_NAME" 2>/dev/null || true
-# Same rule as build.sh: a self-signed "GlanceBar Dev" certificate keeps one
+# Same rule as build.sh: a self-signed "GlanceBar" certificate keeps one
 # identity across rebuilds; GLANCEBAR_SIGN_IDENTITY overrides, "-" is ad hoc.
 SIGN_IDENTITY="${GLANCEBAR_SIGN_IDENTITY:-}"
-if [ -z "$SIGN_IDENTITY" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q '"GlanceBar Dev"'; then
-    SIGN_IDENTITY="GlanceBar Dev"
+if [ -z "$SIGN_IDENTITY" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q '"GlanceBar"'; then
+    SIGN_IDENTITY="GlanceBar"
 fi
 codesign --force --deep --sign "${SIGN_IDENTITY:--}" "$APP_DIR/$APP_NAME" 2>/dev/null || true
 echo "→ Installed to $APP_DIR/$APP_NAME"
@@ -98,13 +98,13 @@ while IFS= read -r CANDIDATE; do
     [ "$REAL" = "$INSTALL_REAL" ] && continue
     case "$REAL" in */.Trash/*) continue ;; esac
     ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$REAL/Contents/Info.plist" 2>/dev/null) || continue
-    case "$ID" in dev.kushal.glancebar2|dev.kushal.glancebar|com.kushal.glancebar) ;; *) continue ;; esac
+    case "$ID" in glancebar|dev.kushal.glancebar2|dev.kushal.glancebar|com.kushal.glancebar) ;; *) continue ;; esac
     COMMIT=$(/usr/libexec/PlistBuddy -c 'Print :GlanceBarBuildCommit' "$REAL/Contents/Info.plist" 2>/dev/null || true)
     if [ -n "$COMMIT" ] && [ "$COMMIT" = "$INSTALL_COMMIT" ]; then continue; fi
     VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$REAL/Contents/Info.plist" 2>/dev/null || echo "?")
     echo "→ Another GlanceBar.app at $REAL (v$VERSION, ${COMMIT:-unstamped}) — move it to the Trash so Spotlight, Raycast and Login Items can only open $APP_DIR/$APP_NAME"
 done < <({
-    mdfind "kMDItemCFBundleIdentifier == 'dev.kushal.glancebar2' || kMDItemCFBundleIdentifier == 'dev.kushal.glancebar' || kMDItemCFBundleIdentifier == 'com.kushal.glancebar'" 2>/dev/null || true
+    mdfind "kMDItemCFBundleIdentifier == 'glancebar' || kMDItemCFBundleIdentifier == 'dev.kushal.glancebar2' || kMDItemCFBundleIdentifier == 'dev.kushal.glancebar' || kMDItemCFBundleIdentifier == 'com.kushal.glancebar'" 2>/dev/null || true
     printf '%s\n' /Applications/GlanceBar.app "$HOME/Applications/GlanceBar.app" \
         "$HOME/Desktop/GlanceBar.app" "$HOME/Downloads/GlanceBar.app" "$SRC_DIR/GlanceBar.app"
 } | awk 'NF' | sort -u)

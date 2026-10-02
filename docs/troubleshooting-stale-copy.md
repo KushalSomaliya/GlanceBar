@@ -31,7 +31,7 @@ build left in a source checkout.
 
 ```bash
 # every GlanceBar.app Launch Services / Spotlight knows about, with version + build commit
-for app in $(mdfind "kMDItemCFBundleIdentifier == 'dev.kushal.glancebar2' || kMDItemCFBundleIdentifier == 'dev.kushal.glancebar' || kMDItemCFBundleIdentifier == 'com.kushal.glancebar'") \
+for app in $(mdfind "kMDItemCFBundleIdentifier == 'glancebar' || kMDItemCFBundleIdentifier == 'dev.kushal.glancebar2' || kMDItemCFBundleIdentifier == 'dev.kushal.glancebar' || kMDItemCFBundleIdentifier == 'com.kushal.glancebar'") \
            ~/.glancebar-src/GlanceBar.app /Applications/GlanceBar.app ~/Applications/GlanceBar.app; do
   [ -d "$app" ] || continue
   printf '%s  v%s  %s\n' "$app" \
@@ -73,6 +73,6 @@ duplicates first; if the icon is still hidden after a relaunch, follow that doc 
   rather than creating a second one, and `build.sh --install` deletes the checkout bundle afterwards.
 - Never `open GlanceBar.app` from the checkout and never `cp` the app to a second folder. If the panel shows a
   "Stale copy …" / "Newer copy …" banner, act on it.
-- Sign with the stable `GlanceBar Dev` identity (see
+- Sign with the stable `GlanceBar` identity (see
   [`troubleshooting-invisible-icon.md`](troubleshooting-invisible-icon.md)) so copies and rebuilds stop
   looking like different apps to macOS.

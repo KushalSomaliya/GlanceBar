@@ -47,8 +47,8 @@ main() {
     # Bundle IDs — must match Constants.swift. Old ones need to be fully purged
     # from Tahoe's caches (macOS 26 keeps ghost entries in "Allow in Menu Bar"
     # otherwise). Newest legacy ID first; keep bash-3 compatible (no arrays).
-    local NEW_BUNDLE_ID="dev.kushal.glancebar2"
-    local LEGACY_BUNDLE_IDS="dev.kushal.glancebar com.kushal.glancebar"
+    local NEW_BUNDLE_ID="glancebar"
+    local LEGACY_BUNDLE_IDS="dev.kushal.glancebar2 dev.kushal.glancebar com.kushal.glancebar"
     local ALL_BUNDLE_IDS="$NEW_BUNDLE_ID $LEGACY_BUNDLE_IDS"
     local MDFIND_QUERY="" bundle_id
     for bundle_id in $ALL_BUNDLE_IDS; do
@@ -147,14 +147,14 @@ main() {
         fi
     }
 
-    # Same rule as build.sh: a self-signed "GlanceBar Dev" certificate keeps one
+    # Same rule as build.sh: a self-signed "GlanceBar" certificate keeps one
     # identity across rebuilds (TCC grants and Tahoe's menu bar state survive);
     # GLANCEBAR_SIGN_IDENTITY overrides, "-" is ad hoc.
     signing_identity() {
         if [ -n "${GLANCEBAR_SIGN_IDENTITY:-}" ]; then
             printf '%s\n' "$GLANCEBAR_SIGN_IDENTITY"
-        elif security find-identity -v -p codesigning 2>/dev/null | grep -q '"GlanceBar Dev"'; then
-            printf '%s\n' "GlanceBar Dev"
+        elif security find-identity -v -p codesigning 2>/dev/null | grep -q '"GlanceBar"'; then
+            printf '%s\n' "GlanceBar"
         else
             printf '%s\n' "-"
         fi

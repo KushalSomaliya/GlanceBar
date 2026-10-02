@@ -16,7 +16,7 @@ set -e
 #
 # Signing: ad-hoc signatures change on every build, so TCC grants (Accessibility
 # for the hot corner) and Tahoe's per-app menu bar state see each rebuild as a
-# new app. A self-signed "GlanceBar Dev" code-signing certificate in the login
+# new app. A self-signed "GlanceBar" code-signing certificate in the login
 # keychain keeps one identity across rebuilds and is picked up automatically.
 # Override with GLANCEBAR_SIGN_IDENTITY=<name>, or GLANCEBAR_SIGN_IDENTITY=- for
 # ad hoc. See CLAUDE.md → Development Workflow.
@@ -114,8 +114,8 @@ stamp_plist_value CFBundleVersion string "$APP_VERSION"
 
 # Codesign — stable identity when one exists, ad hoc otherwise (see header).
 SIGN_IDENTITY="${GLANCEBAR_SIGN_IDENTITY:-}"
-if [ -z "$SIGN_IDENTITY" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q '"GlanceBar Dev"'; then
-    SIGN_IDENTITY="GlanceBar Dev"
+if [ -z "$SIGN_IDENTITY" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q '"GlanceBar"'; then
+    SIGN_IDENTITY="GlanceBar"
 fi
 
 sign_bundle() {
@@ -133,7 +133,7 @@ sign_bundle "$APP_DIR"
 if [ -n "$SIGN_IDENTITY" ] && [ "$SIGN_IDENTITY" != "-" ]; then
     echo "Signed with identity: $SIGN_IDENTITY"
 else
-    echo "Signed ad hoc. Create a 'GlanceBar Dev' code-signing certificate so permissions survive rebuilds (CLAUDE.md → Development Workflow)."
+    echo "Signed ad hoc. Create a 'GlanceBar' code-signing certificate so permissions survive rebuilds (CLAUDE.md → Development Workflow)."
 fi
 
 if [ "$INSTALL" = "0" ]; then
