@@ -19,6 +19,8 @@ A lightweight macOS menu bar app that provides a custom widget sidebar panel wit
 6. `bash build.sh` — assemble .app bundle
 7. `open GlanceBar.app` — launch
 
+`open GlanceBar.app` runs the checkout build, which is a second bundle next to the installed `/Applications/GlanceBar.app`. Spotlight, Raycast and Login Items launch the installed one, so finish a dev session by installing the build you want to keep (quit the app, then `rm -rf /Applications/GlanceBar.app && cp -R GlanceBar.app /Applications/ && codesign --force --deep --sign - /Applications/GlanceBar.app`). The app flags a checkout build that differs from the installed commit in its banner — Open when it is newer, Trash when it is stale.
+
 ## Architecture
 
 - **Build system**: Swift Package Manager (no Xcode.app required, just Swift CLI tools)

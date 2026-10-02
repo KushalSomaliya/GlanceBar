@@ -318,14 +318,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 // Two unstamped builds of the same version are indistinguishable.
                 if commit == nil, myCommit == nil, version == AppConstants.version { continue }
 
-                let isNewer = version.map {
-                    UpdateChecker.compare(UpdateChecker.versionComponents($0), myVersion) > 0
-                } ?? false
+                // Same version string but different code (a dev build in a
+                // checkout next to the installed app) is told apart by build time.
+                let versionOrder = version.map {
+                    UpdateChecker.compare(UpdateChecker.versionComponents($0), myVersion)
+                } ?? -1
+                let isNewer: Bool
+                if versionOrder != 0 {
+                    isNewer = versionOrder > 0
+                } else {
+                    let otherBuilt = Self.executableModificationDate(of: url)
+                    let thisBuilt = Self.executableModificationDate(of: Bundle.main.bundleURL)
+                    isNewer = otherBuilt > thisBuilt
+                }
                 duplicates.append(
                     DuplicateInstall(url: url, version: version, buildCommit: commit, isNewer: isNewer))
             }
         }
         return duplicates
+    }
+
+    private static func executableModificationDate(of bundleURL: URL) -> Date {
+        let executable = bundleURL.appendingPathComponent("Contents/MacOS/\(AppConstants.appName)")
+        let attributes = try? FileManager.default.attributesOfItem(atPath: executable.path)
+        return attributes?[.modificationDate] as? Date ?? .distantPast
     }
 
     private func showDuplicateInstallNotice(_ duplicate: DuplicateInstall) {
