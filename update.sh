@@ -44,10 +44,16 @@ main() {
         fi
     fi
 
-    # Bundle IDs — old needs to be fully purged from Tahoe's caches
-    # (macOS 26 keeps ghost entries in "Allow in Menu Bar" otherwise)
-    local OLD_BUNDLE_ID="com.kushal.glancebar"
-    local NEW_BUNDLE_ID="dev.kushal.glancebar"
+    # Bundle IDs — must match Constants.swift. Old ones need to be fully purged
+    # from Tahoe's caches (macOS 26 keeps ghost entries in "Allow in Menu Bar"
+    # otherwise). Newest legacy ID first; keep bash-3 compatible (no arrays).
+    local NEW_BUNDLE_ID="dev.kushal.glancebar2"
+    local LEGACY_BUNDLE_IDS="dev.kushal.glancebar com.kushal.glancebar"
+    local ALL_BUNDLE_IDS="$NEW_BUNDLE_ID $LEGACY_BUNDLE_IDS"
+    local MDFIND_QUERY="" bundle_id
+    for bundle_id in $ALL_BUNDLE_IDS; do
+        MDFIND_QUERY="${MDFIND_QUERY:+$MDFIND_QUERY || }kMDItemCFBundleIdentifier == '$bundle_id'"
+    done
 
     if [ ! -d "$SRC_DIR" ]; then
         echo "Error: GlanceBar source not found at $SRC_DIR"
@@ -87,12 +93,18 @@ main() {
         echo "→ Rebuilding: installed app is older than the source..."
     fi
 
-    # Migrate preferences from old bundle ID to new (one-time migration)
-    local OLD_PREF="$HOME/Library/Preferences/$OLD_BUNDLE_ID.plist"
-    local NEW_PREF="$HOME/Library/Preferences/$NEW_BUNDLE_ID.plist"
-    if [ -f "$OLD_PREF" ] && [ ! -f "$NEW_PREF" ]; then
-        echo "→ Migrating preferences to new bundle ID..."
-        cp "$OLD_PREF" "$NEW_PREF"
+    # Migrate preferences from the newest previous bundle ID (one-time). The
+    # app also does this itself on first launch, for manual installs.
+    local NEW_PREF="$HOME/Library/Preferences/$NEW_BUNDLE_ID.plist" OLD_PREF
+    if [ ! -f "$NEW_PREF" ]; then
+        for bundle_id in $LEGACY_BUNDLE_IDS; do
+            OLD_PREF="$HOME/Library/Preferences/$bundle_id.plist"
+            if [ -f "$OLD_PREF" ]; then
+                echo "→ Migrating preferences from $bundle_id..."
+                cp "$OLD_PREF" "$NEW_PREF"
+                break
+            fi
+        done
     fi
 
     # Build BEFORE stopping the app. The running app streams these lines into
@@ -169,7 +181,7 @@ main() {
     # folders) plus the usual install spots and the build output.
     list_glancebar_bundles() {
         {
-            mdfind "kMDItemCFBundleIdentifier == '$NEW_BUNDLE_ID' || kMDItemCFBundleIdentifier == '$OLD_BUNDLE_ID'" 2>/dev/null || true
+            mdfind "$MDFIND_QUERY" 2>/dev/null || true
             printf '%s\n' "/Applications/GlanceBar.app" "$HOME/Applications/GlanceBar.app" \
                 "$HOME/Desktop/GlanceBar.app" "$HOME/Downloads/GlanceBar.app" "$SRC_DIR/GlanceBar.app"
         } | awk 'NF' | sort -u
@@ -191,7 +203,7 @@ main() {
             case "$real" in */.Trash/*) continue ;; esac
             plist="$real/Contents/Info.plist"
             id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist" 2>/dev/null) || continue
-            [ "$id" = "$NEW_BUNDLE_ID" ] || [ "$id" = "$OLD_BUNDLE_ID" ] || continue
+            case " $ALL_BUNDLE_IDS " in *" $id "*) ;; *) continue ;; esac
             commit=$(/usr/libexec/PlistBuddy -c 'Print :GlanceBarBuildCommit' "$plist" 2>/dev/null || true)
             # Same commit (e.g. the build output in the checkout) is identical code.
             if [ -n "$commit" ] && [ "$commit" = "$keep_commit" ]; then continue; fi
@@ -335,11 +347,16 @@ main() {
     "$LS_REGISTER" -f "$INSTALL_APP" 2>/dev/null || true
     report_duplicate_bundles "$INSTALL_APP" "$INSTALL_REAL"
 
-    # Purge all traces of the old bundle ID — Tahoe caches menu bar permissions
-    # per bundle ID and leaves ghost entries behind that we need to clear
-    echo "→ Purging old bundle ID state..."
-    defaults delete "$OLD_BUNDLE_ID" 2>/dev/null || true
-    rm -f "$HOME/Library/Preferences/ByHost/$OLD_BUNDLE_ID."* 2>/dev/null || true
+    # Purge all traces of the old bundle IDs — Tahoe caches menu bar permissions
+    # per bundle ID and leaves ghost entries behind that we need to clear. Only
+    # once the new domain exists, so settings are never lost before migration.
+    if [ -f "$NEW_PREF" ]; then
+        echo "→ Purging old bundle ID state..."
+        for bundle_id in $LEGACY_BUNDLE_IDS; do
+            defaults delete "$bundle_id" 2>/dev/null || true
+            rm -f "$HOME/Library/Preferences/ByHost/$bundle_id."* 2>/dev/null || true
+        done
+    fi
 
     # Flush the preferences daemon cache — without this, Tahoe's "Allow in Menu
     # Bar" list keeps showing a ghost entry for the deleted old bundle ID

@@ -31,7 +31,7 @@ build left in a source checkout.
 
 ```bash
 # every GlanceBar.app Launch Services / Spotlight knows about, with version + build commit
-for app in $(mdfind "kMDItemCFBundleIdentifier == 'dev.kushal.glancebar' || kMDItemCFBundleIdentifier == 'com.kushal.glancebar'") \
+for app in $(mdfind "kMDItemCFBundleIdentifier == 'dev.kushal.glancebar2' || kMDItemCFBundleIdentifier == 'dev.kushal.glancebar' || kMDItemCFBundleIdentifier == 'com.kushal.glancebar'") \
            ~/.glancebar-src/GlanceBar.app /Applications/GlanceBar.app ~/Applications/GlanceBar.app; do
   [ -d "$app" ] || continue
   printf '%s  v%s  %s\n' "$app" \

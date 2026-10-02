@@ -21,6 +21,42 @@ class PreferencesManager {
         static let dismissedUpdateCommit = "dismissedUpdateCommit"
         static let dismissedDuplicateInstall = "dismissedDuplicateInstall"
         static let dismissedHiddenIconBuild = "dismissedHiddenIconBuild"
+        static let legacyPreferencesMigrated = "legacyPreferencesMigrated"
+    }
+
+    /// Every user-facing setting, so a bundle ID rotation can carry them over.
+    private static let migratedKeys: [String] = [
+        Keys.hotCorner, Keys.panelWidth, Keys.widgetFilePath, Keys.launchAtLogin,
+        Keys.isPinnedToDesktop, Keys.desktopPanelX, Keys.desktopPanelY, Keys.theme,
+        Keys.shortcutKey, Keys.shortcutKeyCode, Keys.shortcutModifiers,
+        Keys.dismissedUpdateCommit, Keys.dismissedDuplicateInstall,
+    ]
+
+    /// True when this launch copied settings over from a previous bundle ID's
+    /// defaults domain (set only on the first launch after a rotation).
+    private(set) var didMigrateLegacyPreferences = false
+
+    init() {
+        migrateLegacyPreferencesIfNeeded()
+    }
+
+    /// UserDefaults are keyed by bundle ID, so rotating the ID (the fix for
+    /// Tahoe's hidden-icon state) would otherwise reset every setting. On the
+    /// first launch under a new ID, copy the newest previous domain's values
+    /// for keys not already set here. Runs once; the marker records the ID.
+    private func migrateLegacyPreferencesIfNeeded() {
+        guard defaults.object(forKey: Keys.legacyPreferencesMigrated) == nil else { return }
+        for legacyID in AppConstants.legacyBundleIdentifiers {
+            guard let legacy = defaults.persistentDomain(forName: legacyID), !legacy.isEmpty else { continue }
+            for key in Self.migratedKeys where defaults.object(forKey: key) == nil {
+                if let value = legacy[key] {
+                    defaults.set(value, forKey: key)
+                }
+            }
+            didMigrateLegacyPreferences = true
+            break
+        }
+        defaults.set(AppConstants.bundleIdentifier, forKey: Keys.legacyPreferencesMigrated)
     }
 
     /// Remote commit the user dismissed the update banner for — that exact

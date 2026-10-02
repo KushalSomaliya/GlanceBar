@@ -24,6 +24,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         terminateOlderInstances()
 
         preferencesManager = PreferencesManager()
+        // Login items are registered per bundle ID: after a bundle ID rotation
+        // the migrated preference says "on" but nothing is registered yet.
+        if preferencesManager.didMigrateLegacyPreferences, preferencesManager.launchAtLogin {
+            LaunchAtLoginManager.setEnabled(true)
+        }
         ensureWidgetDirectory()
 
         panelController = PanelController(preferencesManager: preferencesManager)
@@ -296,7 +301,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         var seen: Set<String> = [myURL.path]
         var duplicates: [DuplicateInstall] = []
 
-        for bundleID in [AppConstants.bundleIdentifier, AppConstants.legacyBundleIdentifier] {
+        for bundleID in AppConstants.allBundleIdentifiers {
             for candidate in NSWorkspace.shared.urlsForApplications(withBundleIdentifier: bundleID) {
                 let url = candidate.standardizedFileURL.resolvingSymlinksInPath()
                 guard seen.insert(url.path).inserted else { continue }
@@ -412,7 +417,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func terminateOlderInstances() {
         let myPID = ProcessInfo.processInfo.processIdentifier
         let myLaunchDate = NSRunningApplication.current.launchDate ?? Date()
-        let bundleIDs = [AppConstants.bundleIdentifier, AppConstants.legacyBundleIdentifier]
+        let bundleIDs = AppConstants.allBundleIdentifiers
 
         for app in NSWorkspace.shared.runningApplications {
             guard app.processIdentifier != myPID else { continue }

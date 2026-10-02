@@ -2,8 +2,17 @@ import Foundation
 
 enum AppConstants {
     static let appName = "GlanceBar"
-    static let bundleIdentifier = "dev.kushal.glancebar"
-    static let legacyBundleIdentifier = "com.kushal.glancebar"
+    /// Must match CFBundleIdentifier in Resources/Info.plist. Rotated when macOS
+    /// Tahoe's per-bundle-ID menu bar state goes bad (the icon stays hidden
+    /// while the app runs); see docs/troubleshooting-invisible-icon.md.
+    static let bundleIdentifier = "dev.kushal.glancebar2"
+    /// Every previous bundle ID, newest first. Used to find and terminate
+    /// stale copies and to migrate UserDefaults after a rotation.
+    static let legacyBundleIdentifiers = [
+        "dev.kushal.glancebar",  // Apr–Oct 2026
+        "com.kushal.glancebar",  // original
+    ]
+    static var allBundleIdentifiers: [String] { [bundleIdentifier] + legacyBundleIdentifiers }
     static let version = "1.1.6"
     static let githubRepo = "KushalSomaliya/GlanceBar"
 

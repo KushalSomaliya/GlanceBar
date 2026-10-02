@@ -62,12 +62,26 @@ to:
 
 Then:
 
-1. Update `AppConstants.bundleIdentifier` in `Sources/GlanceBar/Constants.swift` to match
-2. If you have `autosaveName` on your status item, update that string too
+1. Update `AppConstants.bundleIdentifier` in `Sources/GlanceBar/Constants.swift` to match, and add the
+   previous ID to the top of `AppConstants.legacyBundleIdentifiers`
+2. Add the previous ID to `LEGACY_BUNDLE_IDS` in `update.sh` and to the `case`/`mdfind` lists in `install.sh`
 3. Rebuild: `rm -rf .build GlanceBar.app && swift build -c release && bash build.sh`
-4. Copy to `/Applications/`: `cp -r GlanceBar.app /Applications/`
+4. Replace the installed copy: `mv /Applications/GlanceBar.app ~/.Trash/ && cp -R GlanceBar.app /Applications/ && codesign --force --deep --sign - /Applications/GlanceBar.app`
 5. Restart menu bar: `killall ControlCenter; killall Dock`
 6. Launch: `open /Applications/GlanceBar.app`
+
+The app takes care of the rest on its first launch under the new ID: `PreferencesManager` copies every
+setting from the newest previous bundle ID's defaults domain, and if Launch at Login was on it re-registers
+the login item (login items are per bundle ID). Two things still need a human: re-grant **Accessibility**
+for the hot corner (TCC is per bundle ID too), and remove the old ID's ghost rows from System Settings →
+Accessibility and → Login Items.
+
+### Rotation log
+
+| Date       | From                   | To                      | Why                                                                                 |
+| ---------- | ---------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
+| 2026-04-12 | `com.kushal.glancebar` | `dev.kushal.glancebar`  | Icon invisible after many ad-hoc rebuilds                                           |
+| 2026-10-02 | `dev.kushal.glancebar` | `dev.kushal.glancebar2` | Icon invisible again; two differently signed copies had shared the ID for months    |
 
 ## How to avoid it in the first place
 
