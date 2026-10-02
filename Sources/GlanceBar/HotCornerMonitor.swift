@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 
 class HotCornerMonitor {
     private let preferencesManager: PreferencesManager
@@ -20,6 +21,7 @@ class HotCornerMonitor {
     }
 
     func start() {
+        requestAccessibilityIfNeeded()
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) {
             [weak self] _ in
             self?.handleMouseMoved()
@@ -33,6 +35,23 @@ class HotCornerMonitor {
         }
         pendingActivation?.cancel()
         pendingActivation = nil
+    }
+
+    /// Global mouse monitoring silently does nothing without the Accessibility
+    /// permission, and the grant is tied to bundle ID + signing identity, so a
+    /// rotation or a signing change loses it. Ask macOS to show its own prompt
+    /// once per build while not trusted: it adds the app to System Settings →
+    /// Privacy & Security → Accessibility and offers a button that opens that
+    /// pane, which is much easier than finding it by hand. With a stable
+    /// signing identity the grant survives rebuilds, so this fires once.
+    private func requestAccessibilityIfNeeded() {
+        guard preferencesManager.hotCorner != .disabled else { return }
+        guard !AXIsProcessTrusted() else { return }
+        let build = AppConstants.buildCommit ?? AppConstants.version
+        guard preferencesManager.accessibilityPromptedBuild != build else { return }
+        preferencesManager.accessibilityPromptedBuild = build
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
     }
 
     private func handleMouseMoved() {

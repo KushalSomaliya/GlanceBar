@@ -22,6 +22,7 @@ class PreferencesManager {
         static let dismissedDuplicateInstall = "dismissedDuplicateInstall"
         static let dismissedHiddenIconBuild = "dismissedHiddenIconBuild"
         static let legacyPreferencesMigrated = "legacyPreferencesMigrated"
+        static let accessibilityPromptedBuild = "accessibilityPromptedBuild"
     }
 
     /// Every user-facing setting, so a bundle ID rotation can carry them over.
@@ -78,6 +79,13 @@ class PreferencesManager {
     var dismissedHiddenIconBuild: String? {
         get { defaults.string(forKey: Keys.dismissedHiddenIconBuild) }
         set { defaults.set(newValue, forKey: Keys.dismissedHiddenIconBuild) }
+    }
+
+    /// Build for which the system Accessibility prompt was already shown, so
+    /// an ungranted hot corner asks once per build rather than on every launch.
+    var accessibilityPromptedBuild: String? {
+        get { defaults.string(forKey: Keys.accessibilityPromptedBuild) }
+        set { defaults.set(newValue, forKey: Keys.accessibilityPromptedBuild) }
     }
 
     var hotCorner: ScreenCorner {

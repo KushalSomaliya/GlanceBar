@@ -72,9 +72,11 @@ Then:
 
 The app takes care of the rest on its first launch under the new ID: `PreferencesManager` copies every
 setting from the newest previous bundle ID's defaults domain, and if Launch at Login was on it re-registers
-the login item (login items are per bundle ID). Two things still need a human: re-grant **Accessibility**
-for the hot corner (TCC is per bundle ID too), and remove the old ID's ghost rows from System Settings →
-Accessibility and → Login Items.
+the login item (login items are per bundle ID). Two things still need a human: approve the **Accessibility**
+prompt the app shows on its next launch (TCC is per bundle ID too; the pane is System Settings → Privacy &
+Security → Accessibility), and clear the old ID's ghost rows: in Privacy & Security → Accessibility remove the
+greyed-out GlanceBar rows, and in General → Login Items & Extensions remove every "GlanceBar" row (they
+select together), then turn Launch at Login off and on in GlanceBar's Preferences.
 
 ### Rotation log
 
