@@ -93,12 +93,45 @@ the bundle ID (the Oct 2026 case: a stale `/Applications` copy plus checkout bui
   and deletes the checkout bundle, so no second copy is ever registered. Never `open` a checkout build. See
   [`troubleshooting-stale-copy.md`](troubleshooting-stale-copy.md).
 - **Sign with a stable identity.** Ad-hoc signatures (`codesign --sign -`) get a new identity on every build.
-  Create a self-signed code-signing certificate once — Keychain Access → Certificate Assistant → Create a
-  Certificate… → Name `GlanceBar`, Identity Type `Self-Signed Root`, Certificate Type `Code Signing` —
-  and `build.sh`, `install.sh` and `update.sh` pick it up automatically (`security find-identity -v -p
-  codesigning` must list it; set its Code Signing trust to Always Trust if `codesign` complains). A Developer
-  ID or free "Apple Development" certificate works the same way via `GLANCEBAR_SIGN_IDENTITY=<name>`. Stable
-  signatures also keep the Accessibility grant for the hot corner across rebuilds.
+  Create a self-signed code-signing certificate once and `build.sh`, `install.sh` and `update.sh` pick it up
+  automatically (`security find-identity -v -p codesigning` must list `"GlanceBar"`). A Developer ID or free
+  "Apple Development" certificate works the same way via `GLANCEBAR_SIGN_IDENTITY=<name>`. Stable signatures
+  also keep the Accessibility grant for the hot corner across rebuilds. This is purely local: no Apple
+  account, review or notarization is involved, and it does not make the app trusted on other Macs.
+
+  *GUI route* (Apple's documented one): open Keychain Access, select the **login** keychain, then in the
+  **menu bar** choose **Keychain Access → Certificate Assistant → Create a Certificate…** (the pencil toolbar
+  button is "New Password Item", not this). Name `GlanceBar`, Identity Type `Self-Signed Root`, Certificate
+  Type `Code Signing`, leave "Let me override defaults" off → Create → Done. It shows up under My
+  Certificates. If `find-identity -v` does not list it, double-click it → Trust → Code Signing: Always Trust.
+
+  *Terminal route* (same result; the OpenSSL part is verified, the `security` calls are the standard ones and
+  prompt for your login password once):
+
+  ```bash
+  cd "$(mktemp -d)"
+  cat > openssl.cnf <<'EOF'
+  [req]
+  distinguished_name = dn
+  x509_extensions = v3_codesign
+  prompt = no
+  [dn]
+  CN = GlanceBar
+  [v3_codesign]
+  basicConstraints = CA:FALSE
+  keyUsage = critical, digitalSignature
+  extendedKeyUsage = critical, codeSigning
+  subjectKeyIdentifier = hash
+  EOF
+  /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -keyout glancebar.key -out glancebar.crt -days 3650 -config openssl.cnf
+  /usr/bin/openssl pkcs12 -export -inkey glancebar.key -in glancebar.crt -out glancebar.p12 -passout pass:glancebar -name GlanceBar
+  security import glancebar.p12 -k ~/Library/Keychains/login.keychain-db -P glancebar -T /usr/bin/codesign
+  security add-trusted-cert -r trustRoot -p codeSign -k ~/Library/Keychains/login.keychain-db glancebar.crt
+  security find-identity -v -p codesigning   # must list "GlanceBar"
+  ```
+
+  Use `/usr/bin/openssl` (LibreSSL) rather than a Homebrew OpenSSL 3; the latter needs `-legacy` on the
+  `pkcs12 -export` line or `security import` rejects the file.
 - **Don't rebuild dozens of times while the app is installed** if you are stuck with ad-hoc signing.
 - **Don't toggle "Allow in Menu Bar" rapidly.** It seems to stick in a bad state if toggled many times quickly.
 
