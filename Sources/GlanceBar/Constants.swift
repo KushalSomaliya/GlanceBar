@@ -17,7 +17,7 @@ enum AppConstants {
         "com.kushal.glancebar",  // original
     ]
     static var allBundleIdentifiers: [String] { [bundleIdentifier] + legacyBundleIdentifiers }
-    static let version = "1.1.6"
+    static let version = "1.1.7"
     static let githubRepo = "KushalSomaliya/GlanceBar"
 
     /// Commit the running binary was built from, stamped into Info.plist by
